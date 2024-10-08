@@ -55,7 +55,6 @@ export const SendTx = () => {
     <form
       onSubmit={onSubmit}
       style={{
-        padding: "1rem",
         display: "flex",
         flexDirection: "column",
         gap: "0.5rem",
@@ -67,7 +66,7 @@ export const SendTx = () => {
       <label htmlFor="amount">Amount:</label>
       <input id="amount" type="text" />
       <br />
-      <button type="submit">Send Transaction (devnet)</button>
+      <button type="submit">Send Transaction</button>
     </form>
   );
 };
