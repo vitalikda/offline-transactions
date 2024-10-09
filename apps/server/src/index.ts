@@ -7,10 +7,6 @@ app.get("/", (c) => {
   return c.text("Server is running!");
 });
 
-const port = Number.parseInt(process.env.PORT || "3000");
-console.log(`Running at http://localhost:${port}`);
+console.log("Running at http://localhost:3000");
 
-serve({
-  fetch: app.fetch,
-  port,
-});
+serve(app);
