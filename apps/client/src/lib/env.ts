@@ -5,8 +5,6 @@ const envSchema = z.object({
   VITE_API_URL: z.string().url(),
 });
 
-export type env = z.infer<typeof envSchema>;
-
 const envParsed = envSchema.safeParse(import.meta.env);
 
 if (!envParsed.success) {
@@ -15,6 +13,6 @@ if (!envParsed.success) {
   process.exit(1);
 }
 
-const envData = envParsed.data;
+export type ENV = z.infer<typeof envSchema>;
 
-export default envData;
+export const env = envParsed.data;

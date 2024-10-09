@@ -1,4 +1,4 @@
-import env from "../lib/env";
+import { env } from "../lib/env";
 
 type FetchInstance = <T>(url: string, options: RequestInit) => Promise<T>;
 
