@@ -1,21 +1,37 @@
 {
   "name": "server",
-  "private": true,
-  "version": "0.0.0",
   "type": "module",
+  "version": "0.0.1",
+  "private": true,
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "start": "node ./dist/index.js",
-    "build": "tsc"
+    "build": "tsc",
+    "lint": "eslint --cache ."
   },
   "dependencies": {
     "@hono/node-server": "1.13.1",
+    "@hono/swagger-ui": "0.4.1",
+    "@hono/zod-openapi": "0.16.4",
+    "@libsql/client": "0.14.0",
     "@solana/web3.js": "1.95.3",
     "bs58": "6.0.0",
-    "hono": "4.6.3"
+    "dotenv": "16.4.5",
+    "drizzle-orm": "0.34.1",
+    "drizzle-zod": "0.5.1",
+    "hono": "4.6.3",
+    "hono-pino": "0.3.0",
+    "pino": "9.4.0",
+    "pino-pretty": "11.2.2",
+    "stoker": "1.0.9",
+    "zod": "3.23.8"
   },
   "devDependencies": {
+    "@antfu/eslint-config": "3.7.3",
     "@types/node": "22.7.4",
+    "drizzle-kit": "0.25.0",
+    "eslint": "9.9.0",
+    "eslint-plugin-format": "0.1.2",
     "tsx": "4.19.1",
     "typescript": "5.5.3"
   }

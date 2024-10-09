@@ -1,12 +1,12 @@
 import { serve } from "@hono/node-server";
-import { Hono } from "hono";
+import { env } from "src/lib/env";
+import app from "./app";
 
-const app = new Hono({ strict: false }).basePath("/api");
+const port = env.PORT;
+// eslint-disable-next-line no-console
+console.log(`Running at http://localhost:${port}`);
 
-app.get("/", (c) => {
-  return c.text("Server is running!");
+serve({
+  fetch: app.fetch,
+  port,
 });
-
-console.log("Running at http://localhost:3000");
-
-serve(app);

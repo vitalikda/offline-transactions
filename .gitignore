@@ -25,4 +25,6 @@ dist-ssr
 
 # env
 .env
-.env.*
+
+.eslintcache
+dev.db

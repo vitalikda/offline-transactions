@@ -1,13 +1,23 @@
 import {
   Connection,
-  type Keypair,
+  Keypair,
   NONCE_ACCOUNT_LENGTH,
   NonceAccount,
+  PublicKey,
   SystemProgram,
   Transaction,
   clusterApiUrl,
 } from "@solana/web3.js";
-import { retry } from "./retry";
+import bs58 from "bs58";
+import { env } from "src/lib/env";
+import { retry } from "src/lib/retry";
+import { serialize, toLamports } from "src/lib/solana";
+
+export const getKeypair = () => Keypair.generate();
+
+export const getAuthKeypair = () => {
+  return Keypair.fromSecretKey(bs58.decode(env.AUTH_KEYPAIR));
+};
 
 const connection = new Connection(clusterApiUrl("devnet"), "confirmed");
 
@@ -36,9 +46,8 @@ const createNonceTx = async (
   nonceKeypair: Keypair,
   nonceAuthKeypair: Keypair
 ) => {
-  const rent = await connection.getMinimumBalanceForRentExemption(
-    NONCE_ACCOUNT_LENGTH
-  );
+  const rent =
+    await connection.getMinimumBalanceForRentExemption(NONCE_ACCOUNT_LENGTH);
 
   const latestBlockhash = await connection.getLatestBlockhash();
 
@@ -83,10 +92,13 @@ const getNonceInfo = async (nonceKeypair: Keypair) => {
   return NonceAccount.fromAccountData(accountInfo.data);
 };
 
-export const createNonce = async (
-  nonceKeypair: Keypair,
-  nonceAuthKeypair: Keypair
-) => {
+export const createNonce = async ({
+  nonceKeypair,
+  nonceAuthKeypair,
+}: {
+  nonceKeypair: Keypair;
+  nonceAuthKeypair: Keypair;
+}) => {
   const tx = await createNonceTx(nonceKeypair, nonceAuthKeypair);
   await sendAndConfirmRawTransaction(connection, tx.serialize());
 
@@ -95,6 +107,45 @@ export const createNonce = async (
   return nonceAccount.nonce;
 };
 
-export const executeTransaction = async (signedTx: Buffer) => {
+export const createAdvanceTransaction = async ({
+  nonce,
+  nonceKeypair,
+  nonceAuthKeypair,
+  sender,
+  recipient,
+  amount,
+}: {
+  nonceKeypair: Keypair;
+  nonceAuthKeypair: Keypair;
+  nonce: string;
+  sender: string;
+  recipient: string;
+  amount: number;
+}) => {
+  const advanceIx = SystemProgram.nonceAdvance({
+    authorizedPubkey: nonceAuthKeypair.publicKey,
+    noncePubkey: nonceKeypair.publicKey,
+  });
+
+  const senderPubkey = new PublicKey(sender);
+
+  const transferIx = SystemProgram.transfer({
+    fromPubkey: senderPubkey,
+    toPubkey: new PublicKey(recipient),
+    lamports: toLamports(amount),
+  });
+
+  const tx = new Transaction();
+
+  tx.add(advanceIx, transferIx);
+  tx.recentBlockhash = nonce;
+  tx.feePayer = senderPubkey;
+  tx.sign(nonceAuthKeypair);
+
+  return serialize(tx);
+};
+
+export const executeTransaction = async (signature: string) => {
+  const signedTx = Buffer.from(signature, "base64");
   return sendAndConfirmRawTransaction(connection, signedTx);
 };
