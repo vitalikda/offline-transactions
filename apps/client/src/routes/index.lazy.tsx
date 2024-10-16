@@ -1,15 +1,12 @@
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { useConnection, useWallet } from "@solana/wallet-adapter-react";
-import {
-  LAMPORTS_PER_SOL,
-  PublicKey,
-  SystemProgram,
-  Transaction,
-} from "@solana/web3.js";
+import { PublicKey, SystemProgram, Transaction } from "@solana/web3.js";
+import { createLazyFileRoute } from "@tanstack/react-router";
 import { toast } from "sonner";
+import { toLamports } from "../lib/solana";
 
-const toLamports = (n: string | number) => +n * LAMPORTS_PER_SOL;
-
-export const SendTx = () => {
+function IndexPage() {
   const { connection } = useConnection();
   const { publicKey, sendTransaction } = useWallet();
 
@@ -52,21 +49,20 @@ export const SendTx = () => {
   if (!publicKey) return null;
 
   return (
-    <form
-      onSubmit={onSubmit}
-      style={{
-        display: "flex",
-        flexDirection: "column",
-        gap: "0.5rem",
-        textAlign: "left",
-      }}
-    >
-      <label htmlFor="recipient">Recipient:</label>
-      <input id="recipient" type="text" />
-      <label htmlFor="amount">Amount:</label>
-      <input id="amount" type="text" />
-      <br />
-      <button type="submit">Send Transaction</button>
-    </form>
+    <div className="p-8 bg-zinc-900 shadow-md max-w-fit">
+      <form onSubmit={onSubmit} className="flex flex-col gap-2 text-left">
+        <label htmlFor="recipient">Recipient:</label>
+        <Input id="recipient" type="text" />
+        <label htmlFor="amount">Amount:</label>
+        <Input id="amount" type="text" />
+        <Button type="submit" className="mt-4">
+          Send Transaction
+        </Button>
+      </form>
+    </div>
   );
-};
+}
+
+export const Route = createLazyFileRoute("/")({
+  component: IndexPage,
+});
