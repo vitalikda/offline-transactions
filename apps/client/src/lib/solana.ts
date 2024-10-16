@@ -13,7 +13,9 @@ import {
 export const toLamports = (n: string | number) => +n * LAMPORTS_PER_SOL;
 
 export const serialize = (tx: Transaction) => {
-  return tx.serialize({ requireAllSignatures: false }).toString("base64");
+  return tx
+    .serialize({ requireAllSignatures: false, verifySignatures: false })
+    .toString("base64");
 };
 
 export const deserialize = (tx: string) => {
@@ -22,7 +24,7 @@ export const deserialize = (tx: string) => {
 
 export const airdrop = async (publicKey: PublicKey) => {
   const sig = await connection.requestAirdrop(publicKey, LAMPORTS_PER_SOL);
-  return executeTransaction(sig);
+  return sendAndConfirmRawTransaction(sig);
 };
 
 export const makeKeypairs = (n = 1) => {
@@ -30,6 +32,9 @@ export const makeKeypairs = (n = 1) => {
 };
 
 // TODO: DELETE!
+
+export const wait = (ms: number) =>
+  new Promise((resolve) => setTimeout(resolve, ms));
 
 export const retry = async <T>(
   fn: () => Promise<T>,
@@ -40,7 +45,7 @@ export const retry = async <T>(
     return await fn();
   } catch (error) {
     if (retries > 0) {
-      await new Promise((resolve) => setTimeout(resolve, delay));
+      await wait(delay);
       return retry(fn, retries - 1, delay);
     }
     throw error;
@@ -49,11 +54,10 @@ export const retry = async <T>(
 
 export const connection = new Connection(clusterApiUrl("devnet"), "confirmed");
 
-export const sendAndConfirmRawTransaction = async (
-  connection: Connection,
-  tx: Buffer
-) => {
-  const signature = await connection.sendRawTransaction(tx);
+export const sendAndConfirmRawTransaction = async (tx: string) => {
+  const signature = await connection.sendRawTransaction(
+    Buffer.from(tx, "base64")
+  );
   console.log("Signature: ", signature);
 
   const latestBlockHash = await connection.getLatestBlockhash();
@@ -70,29 +74,24 @@ export const sendAndConfirmRawTransaction = async (
   return signature;
 };
 
-export const executeTransaction = async (signature: string) => {
-  const signedTx = Buffer.from(signature, "base64");
-  return sendAndConfirmRawTransaction(connection, signedTx);
-};
-
-export const createNonceTx = ({
+export const createNonceTx = async ({
   nonceKeypair,
   signer,
   feePayer,
-  rent,
-  blockhash,
 }: {
   nonceKeypair: Keypair;
   signer: string;
   feePayer?: string;
-  rent: number;
-  blockhash: string;
 }) => {
+  const rent =
+    await connection.getMinimumBalanceForRentExemption(NONCE_ACCOUNT_LENGTH);
+  const latestBlockhash = await connection.getLatestBlockhash();
+
   const tx = new Transaction();
   const signerPK = new PublicKey(signer);
 
   tx.feePayer = feePayer ? new PublicKey(feePayer) : signerPK;
-  tx.recentBlockhash = blockhash;
+  tx.recentBlockhash = latestBlockhash.blockhash;
 
   const createNonceAccountIx = SystemProgram.createAccount({
     fromPubkey: signerPK,
@@ -119,21 +118,25 @@ export const closeNonceTx = async ({
   nonceKeypair,
   signer,
   feePayer,
-  blockhash,
 }: {
   nonceKeypair: Keypair;
   signer: string;
   feePayer?: string;
-  blockhash: string;
 }) => {
   const balance = await connection.getBalance(nonceKeypair.publicKey);
-  if (!balance) return;
+  if (!balance) {
+    throw new Error(
+      `Nonce account not found: ${nonceKeypair.publicKey.toString()}`
+    );
+  }
+
+  const latestBlockhash = await connection.getLatestBlockhash();
 
   const tx = new Transaction();
   const signerPK = new PublicKey(signer);
 
   tx.feePayer = feePayer ? new PublicKey(feePayer) : signerPK;
-  tx.recentBlockhash = blockhash;
+  tx.recentBlockhash = latestBlockhash.blockhash;
 
   const closeNonceIx = SystemProgram.nonceWithdraw({
     noncePubkey: nonceKeypair.publicKey,
@@ -144,12 +147,10 @@ export const closeNonceTx = async ({
 
   tx.add(closeNonceIx);
 
-  tx.partialSign(nonceKeypair);
-
   return tx;
 };
 
-const getAccountInfo = async ({ publicKey }: Keypair) => {
+const getAccountInfo = async ({ publicKey }: { publicKey: PublicKey }) => {
   console.log("Fetching nonce account info");
   const accountInfo = await connection.getAccountInfo(publicKey);
   if (!accountInfo) {
@@ -158,8 +159,8 @@ const getAccountInfo = async ({ publicKey }: Keypair) => {
   return accountInfo;
 };
 
-export const getNonceInfo = async (nonceKeypair: Keypair) => {
+export const getNonceInfo = async ({ publicKey }: { publicKey: PublicKey }) => {
   // Note: nonce account is not available immediately after creation
-  const accountInfo = await retry(() => getAccountInfo(nonceKeypair), 3, 3000);
+  const accountInfo = await retry(() => getAccountInfo({ publicKey }), 3, 3000);
   return NonceAccount.fromAccountData(accountInfo.data);
 };

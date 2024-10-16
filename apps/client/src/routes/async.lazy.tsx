@@ -2,7 +2,7 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { useWallet } from "@solana/wallet-adapter-react";
-import { type Keypair, NONCE_ACCOUNT_LENGTH } from "@solana/web3.js";
+import type { Keypair } from "@solana/web3.js";
 import { createLazyFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -11,15 +11,15 @@ import {
   connection,
   createNonceTx,
   deserialize,
-  executeTransaction,
   getNonceInfo,
   makeKeypairs,
+  sendAndConfirmRawTransaction,
   serialize,
 } from "../lib/solana";
 import { confirmAdvanceTransaction, getAdvanceTransaction } from "../utils/api";
 
 function AsyncPage() {
-  const { publicKey, signAllTransactions } = useWallet();
+  const { publicKey, signAllTransactions, sendTransaction } = useWallet();
 
   const [loading, setLoading] = useState(false);
 
@@ -40,38 +40,35 @@ function AsyncPage() {
     try {
       const nonceKeypairs = makeKeypairs(toCreate);
 
-      const rent =
-        await connection.getMinimumBalanceForRentExemption(
-          NONCE_ACCOUNT_LENGTH
-        );
-      const latestBlockhash = await connection.getLatestBlockhash();
-
-      const noncesTxs = nonceKeypairs.map((nonceKeypair) =>
-        createNonceTx({
-          nonceKeypair,
-          signer: publicKey.toString(),
-          rent,
-          blockhash: latestBlockhash.blockhash,
-        })
+      const noncesTxs = await Promise.all(
+        nonceKeypairs.map((nonceKeypair) =>
+          createNonceTx({
+            nonceKeypair,
+            signer: publicKey.toString(),
+          })
+        )
       );
-      console.log("NonceTx: ", noncesTxs);
+      console.log("NonceTx: ", noncesTxs.map((tx) => serialize(tx)).join(", "));
 
-      const sigs = await signAllTransactions?.(noncesTxs);
-      if (!sigs) throw new Error("Transaction not signed");
+      const txSigned = await signAllTransactions?.(noncesTxs);
+      if (!txSigned) throw new Error("Transaction not signed");
 
       await Promise.all(
-        sigs.map(async (sig) => await executeTransaction(serialize(sig)))
+        txSigned.map((tx) => sendTransaction?.(tx, connection))
+        // txSigned.map((tx) => sendAndConfirmRawTransaction(serialize(tx))) //! NOT WORKING
       );
 
-      await Promise.all(
-        nonceKeypairs.map(async (nonceKeypair) => {
-          const nonceAccount = await getNonceInfo(nonceKeypair);
-          setNonces((s) => [
-            ...s,
-            { keypair: nonceKeypair, nonce: nonceAccount.nonce },
-          ]);
+      const newNonces = await Promise.all(
+        nonceKeypairs.map(async (keypair, i) => {
+          console.log(`Keypair:${i}: ${keypair.publicKey}`);
+          const nonceAccount = await getNonceInfo(keypair);
+          console.log(`Nonce:${i}: ${nonceAccount.nonce}`);
+          return { keypair, nonce: nonceAccount.nonce };
         })
       );
+
+      console.log("KeypairNonce: ", newNonces);
+      setNonces((s) => [...s, ...newNonces]);
 
       toast.info("Nonces received!");
     } catch (error) {
@@ -90,7 +87,6 @@ function AsyncPage() {
     try {
       if (!publicKey) throw new Error("Wallet not connected");
 
-      const latestBlockhash = await connection.getLatestBlockhash();
       const nonceKeypairs = nonces
         .filter(({ nonce }) => toRemove.includes(nonce))
         .map(({ keypair }) => keypair);
@@ -102,18 +98,20 @@ function AsyncPage() {
           closeNonceTx({
             nonceKeypair,
             signer: publicKey.toString(),
-            blockhash: latestBlockhash.blockhash,
           })
         )
       );
       console.log("CloseTxs: ", closeTxs);
 
-      const sigs = await signAllTransactions?.(closeTxs.filter((v) => !!v));
-      if (!sigs) throw new Error("Transaction not signed");
+      const txSigned = await signAllTransactions?.(closeTxs);
+      if (!txSigned) throw new Error("Transaction not signed");
 
       await Promise.all(
-        sigs.map(async (sig) => await executeTransaction(serialize(sig)))
+        txSigned.map((tx) => sendTransaction?.(tx, connection))
+        // txSigned.map((tx) => sendAndConfirmRawTransaction(serialize(tx))) //! NOT WORKING
       );
+
+      setNonces((s) => [...s].filter(({ nonce }) => !toRemove.includes(nonce)));
 
       toast.info("Nonce removed!");
     } catch (error) {
@@ -171,8 +169,8 @@ function AsyncPage() {
         <form onSubmit={onRemoveNonces} className="flex flex-col gap-2">
           {!!nonces.length && (
             <>
-              {nonces.map(({ nonce }) => (
-                <div key={nonce} className="items-top flex space-x-2">
+              {nonces.map(({ nonce }, i) => (
+                <div key={`${i}${nonce}`} className="flex space-x-2">
                   <Checkbox
                     id={nonce}
                     onCheckedChange={(v) => {
@@ -202,7 +200,7 @@ function AsyncPage() {
             <Button onClick={decrease} size="icon" variant="ghost">
               -
             </Button>
-            <span className="p-3">{toCreate}</span>
+            <span className="p-2">{toCreate}</span>
             <Button onClick={increase} size="icon" variant="ghost">
               +
             </Button>
