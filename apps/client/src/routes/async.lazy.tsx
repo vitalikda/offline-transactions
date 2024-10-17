@@ -8,21 +8,17 @@ import { useState } from "react";
 import { toast } from "sonner";
 import {
   closeNonceTx,
-  connection,
   createNonceTx,
   deserialize,
   getNonceInfo,
   makeKeypairs,
   sendAndConfirmRawTransaction,
   serialize,
-  useGetMinimumBalanceForRentExemption,
 } from "../lib/solana";
 import { confirmAdvanceTransaction, getAdvanceTransaction } from "../utils/api";
 
 function AsyncPage() {
   const { publicKey, signAllTransactions } = useWallet();
-
-  const { nonceAccountRentExcemp } = useGetMinimumBalanceForRentExemption(connection);
 
   const [loading, setLoading] = useState(false);
 
@@ -48,7 +44,6 @@ function AsyncPage() {
           createNonceTx({
             nonceKeypair,
             signer: publicKey.toString(),
-            rent: nonceAccountRentExcemp,
           })
         )
       );
@@ -102,7 +97,6 @@ function AsyncPage() {
           closeNonceTx({
             nonceKeypair,
             signer: publicKey.toString(),
-            rent: nonceAccountRentExcemp,
           })
         )
       );

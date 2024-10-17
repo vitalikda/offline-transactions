@@ -10,7 +10,6 @@ import {
   Transaction,
   clusterApiUrl,
 } from "@solana/web3.js";
-import { useCallback, useEffect, useState } from "react";
 
 export const toLamports = (n: string | number) => +n * LAMPORTS_PER_SOL;
 
@@ -85,13 +84,14 @@ export const createNonceTx = async ({
   nonceKeypair,
   signer,
   feePayer,
-  rent,
 }: {
   nonceKeypair: Keypair;
   signer: string;
   feePayer?: string;
-  rent: number;
 }) => {
+  const rent =
+    await connection.getMinimumBalanceForRentExemption(NONCE_ACCOUNT_LENGTH);
+
   const latestBlockhash = await connection.getLatestBlockhash();
 
   const tx = new Transaction();
@@ -126,12 +126,10 @@ export const closeNonceTx = async ({
   nonceKeypair,
   signer,
   feePayer,
-  rent,
 }: {
   nonceKeypair: Keypair;
   signer: string;
   feePayer?: string;
-  rent: number;
 }) => {
   const balance = await connection.getBalance(nonceKeypair.publicKey);
   if (!balance) {
@@ -140,6 +138,8 @@ export const closeNonceTx = async ({
     );
   }
 
+  const rent =
+    await connection.getMinimumBalanceForRentExemption(NONCE_ACCOUNT_LENGTH);
   if (balance < rent) {
     throw new Error(
       `Nonce account balance for ${nonceKeypair.publicKey.toString()} is less than rent: ${balance} < ${rent}`
@@ -180,16 +180,4 @@ export const getNonceInfo = async ({ publicKey }: { publicKey: PublicKey }) => {
   // Note: nonce account is not available immediately after creation
   const accountInfo = await retry(() => getAccountInfo({ publicKey }), 3, 3000);
   return NonceAccount.fromAccountData(accountInfo.data);
-};
-
-export const useGetMinimumBalanceForRentExemption = (connection: Connection) => {
-  const [nonceAccountRentExcemp, setNonceAccountRentExcemp] = useState<number>(0);
-
-  const getNonceAccountRentExcemp = useCallback(async () => await connection.getMinimumBalanceForRentExemption(NONCE_ACCOUNT_LENGTH), [connection]);
-
-  useEffect(() => {
-    getNonceAccountRentExcemp().then(setNonceAccountRentExcemp);
-  }, [getNonceAccountRentExcemp]);
-
-  return { nonceAccountRentExcemp };
 };
