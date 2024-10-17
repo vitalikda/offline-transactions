@@ -1,4 +1,5 @@
 import {
+  ComputeBudgetProgram,
   Connection,
   Keypair,
   LAMPORTS_PER_SOL,
@@ -74,6 +75,11 @@ export const sendAndConfirmRawTransaction = async (tx: string) => {
   return signature;
 };
 
+const getFeePrioritizationIxs = (cuPrice = 250_000, cuLimit = 200_000) => [
+  ComputeBudgetProgram.setComputeUnitPrice({ microLamports: cuPrice }),
+  ComputeBudgetProgram.setComputeUnitLimit({ units: cuLimit }),
+];
+
 export const createNonceTx = async ({
   nonceKeypair,
   signer,
@@ -107,6 +113,7 @@ export const createNonceTx = async ({
   });
 
   tx.add(createNonceAccountIx, initNonceAccountIx);
+  tx.add(...getFeePrioritizationIxs());
 
   // tx.sign(nonceAuthKeypair, nonceKeypair);
   tx.partialSign(nonceKeypair);
@@ -146,6 +153,7 @@ export const closeNonceTx = async ({
   });
 
   tx.add(closeNonceIx);
+  tx.add(...getFeePrioritizationIxs());
 
   return tx;
 };

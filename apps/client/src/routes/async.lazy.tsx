@@ -54,8 +54,8 @@ function AsyncPage() {
       if (!txSigned) throw new Error("Transaction not signed");
 
       await Promise.all(
-        txSigned.map((tx) => sendTransaction?.(tx, connection))
-        // txSigned.map((tx) => sendAndConfirmRawTransaction(serialize(tx))) //! NOT WORKING
+        // txSigned.map((tx) => sendTransaction?.(tx, connection)) // NOTE: each tx require confirmation
+        txSigned.map((tx) => sendAndConfirmRawTransaction(serialize(tx)))
       );
 
       const newNonces = await Promise.all(
@@ -107,8 +107,8 @@ function AsyncPage() {
       if (!txSigned) throw new Error("Transaction not signed");
 
       await Promise.all(
-        txSigned.map((tx) => sendTransaction?.(tx, connection))
-        // txSigned.map((tx) => sendAndConfirmRawTransaction(serialize(tx))) //! NOT WORKING
+        // txSigned.map((tx) => sendTransaction?.(tx, connection)) // NOTE: each tx require confirmation
+        txSigned.map((tx) => sendAndConfirmRawTransaction(serialize(tx)))
       );
 
       setNonces((s) => [...s].filter(({ nonce }) => !toRemove.includes(nonce)));
