@@ -15,11 +15,14 @@ import {
   makeKeypairs,
   sendAndConfirmRawTransaction,
   serialize,
+  useGetMinimumBalanceForRentExemption,
 } from "../lib/solana";
 import { confirmAdvanceTransaction, getAdvanceTransaction } from "../utils/api";
 
 function AsyncPage() {
-  const { publicKey, signAllTransactions, sendTransaction } = useWallet();
+  const { publicKey, signAllTransactions } = useWallet();
+
+  const { nonceAccountRentExcemp } = useGetMinimumBalanceForRentExemption(connection);
 
   const [loading, setLoading] = useState(false);
 
@@ -45,6 +48,7 @@ function AsyncPage() {
           createNonceTx({
             nonceKeypair,
             signer: publicKey.toString(),
+            rent: nonceAccountRentExcemp,
           })
         )
       );
@@ -98,6 +102,7 @@ function AsyncPage() {
           closeNonceTx({
             nonceKeypair,
             signer: publicKey.toString(),
+            rent: nonceAccountRentExcemp,
           })
         )
       );
