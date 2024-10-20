@@ -3,8 +3,18 @@
   "type": "module",
   "version": "0.0.1",
   "private": true,
+  "exports": {
+    "./hc": {
+      "import": {
+        "types": "./dist/src/hc.d.ts",
+        "default": "./dist/src/hc.js"
+      }
+    }
+  },
   "scripts": {
-    "dev": "tsx watch src/index.ts",
+    "dev": "pnpm --filter server --parallel \"/^dev:.*/\"",
+    "dev:server": "tsx watch src/index.ts",
+    "dev:tsc": "tsc -p tsconfig.build.json --watch",
     "start": "tsx ./dist/src/index.js",
     "build": "tsc && tsc-alias",
     "lint": "eslint --cache ."

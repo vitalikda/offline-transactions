@@ -110,6 +110,9 @@ importers:
       postcss:
         specifier: ^8.4.47
         version: 8.4.47
+      server:
+        specifier: workspace:*
+        version: link:../server
       tailwindcss:
         specifier: ^3.4.14
         version: 3.4.14
@@ -4340,7 +4343,6 @@ packages:
 
   libsql@0.4.6:
     resolution: {integrity: sha512-F5M+ltteK6dCcpjMahrkgT96uFJvVI8aQ4r9f2AzHQjC7BkAYtvfMSTWGvRBezRgMUIU2h1Sy0pF9nOGOD5iyA==}
-    cpu: [x64, arm64, wasm32]
     os: [darwin, linux, win32]
 
   lighthouse-logger@1.4.2:
