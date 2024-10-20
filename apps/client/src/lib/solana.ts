@@ -7,50 +7,33 @@ import {
   NonceAccount,
   PublicKey,
   SystemProgram,
-  Transaction,
+  TransactionMessage,
+  VersionedTransaction,
   clusterApiUrl,
 } from "@solana/web3.js";
+import bs58 from "bs58";
+import { retry } from "./utils";
 
 export const toLamports = (n: string | number) => +n * LAMPORTS_PER_SOL;
 
-export const serialize = (tx: Transaction) => {
-  return tx
-    .serialize({ requireAllSignatures: false, verifySignatures: false })
-    .toString("base64");
+export const serialize = (tx: VersionedTransaction) => {
+  return Buffer.from(tx.serialize()).toString("base64");
 };
 
 export const deserialize = (tx: string) => {
-  return Transaction.from(Buffer.from(tx, "base64"));
+  return VersionedTransaction.deserialize(Buffer.from(tx, "base64"));
 };
 
-export const airdrop = async (publicKey: PublicKey) => {
-  const sig = await connection.requestAirdrop(publicKey, LAMPORTS_PER_SOL);
-  return sendAndConfirmRawTransaction(sig);
+export const getKeypair = () => Keypair.generate();
+
+export const encodeKeypair = (kp: Keypair) => bs58.encode(kp.secretKey);
+
+export const getAuthKeypair = (secret: string) => {
+  return Keypair.fromSecretKey(bs58.decode(secret));
 };
 
 export const makeKeypairs = (n = 1) => {
-  return Array.from({ length: n }).map(() => Keypair.generate());
-};
-
-// TODO: DELETE!
-
-export const wait = (ms: number) =>
-  new Promise((resolve) => setTimeout(resolve, ms));
-
-export const retry = async <T>(
-  fn: () => Promise<T>,
-  retries: number,
-  delay: number
-): Promise<T> => {
-  try {
-    return await fn();
-  } catch (error) {
-    if (retries > 0) {
-      await wait(delay);
-      return retry(fn, retries - 1, delay);
-    }
-    throw error;
-  }
+  return Array.from({ length: n }).map(() => getKeypair());
 };
 
 export const connection = new Connection(clusterApiUrl("devnet"), "confirmed");
@@ -75,10 +58,30 @@ export const sendAndConfirmRawTransaction = async (tx: string) => {
   return signature;
 };
 
-const getFeePrioritizationIxs = (cuPrice = 250_000, cuLimit = 200_000) => [
+export const airdrop = async (publicKey: PublicKey) => {
+  const sig = await connection.requestAirdrop(publicKey, LAMPORTS_PER_SOL);
+  return sendAndConfirmRawTransaction(sig);
+};
+
+const getPrioriFeeIxs = (cuPrice = 250_000, cuLimit = 200_000) => [
   ComputeBudgetProgram.setComputeUnitPrice({ microLamports: cuPrice }),
   ComputeBudgetProgram.setComputeUnitLimit({ units: cuLimit }),
 ];
+
+const getAccountInfo = async ({ publicKey }: { publicKey: PublicKey }) => {
+  console.log("Fetching nonce account info");
+  const accountInfo = await connection.getAccountInfo(publicKey);
+  if (!accountInfo) {
+    throw new Error(`Nonce account not found: ${publicKey.toString()}`);
+  }
+  return accountInfo;
+};
+
+export const getNonceInfo = async ({ publicKey }: { publicKey: PublicKey }) => {
+  // Note: nonce account is not available immediately after creation
+  const accountInfo = await retry(() => getAccountInfo({ publicKey }), 3, 3000);
+  return NonceAccount.fromAccountData(accountInfo.data);
+};
 
 export const createNonceTx = async ({
   nonceKeypair,
@@ -94,30 +97,32 @@ export const createNonceTx = async ({
 
   const latestBlockhash = await connection.getLatestBlockhash();
 
-  const tx = new Transaction();
   const signerPK = new PublicKey(signer);
 
-  tx.feePayer = feePayer ? new PublicKey(feePayer) : signerPK;
-  tx.recentBlockhash = latestBlockhash.blockhash;
+  const ixs = [
+    SystemProgram.createAccount({
+      fromPubkey: signerPK,
+      newAccountPubkey: nonceKeypair.publicKey,
+      lamports: rent,
+      space: NONCE_ACCOUNT_LENGTH,
+      programId: SystemProgram.programId,
+    }),
 
-  const createNonceAccountIx = SystemProgram.createAccount({
-    fromPubkey: signerPK,
-    newAccountPubkey: nonceKeypair.publicKey,
-    lamports: rent,
-    space: NONCE_ACCOUNT_LENGTH,
-    programId: SystemProgram.programId,
-  });
+    SystemProgram.nonceInitialize({
+      authorizedPubkey: signerPK,
+      noncePubkey: nonceKeypair.publicKey,
+    }),
+  ];
 
-  const initNonceAccountIx = SystemProgram.nonceInitialize({
-    authorizedPubkey: signerPK,
-    noncePubkey: nonceKeypair.publicKey,
-  });
+  const messageV0 = new TransactionMessage({
+    payerKey: feePayer ? new PublicKey(feePayer) : signerPK,
+    recentBlockhash: latestBlockhash.blockhash,
+    instructions: ixs.concat(getPrioriFeeIxs()),
+  }).compileToV0Message();
 
-  tx.add(createNonceAccountIx, initNonceAccountIx);
-  tx.add(...getFeePrioritizationIxs());
+  const tx = new VersionedTransaction(messageV0);
 
-  // tx.sign(nonceAuthKeypair, nonceKeypair);
-  tx.partialSign(nonceKeypair);
+  tx.sign([nonceKeypair]);
 
   return tx;
 };
@@ -148,36 +153,64 @@ export const closeNonceTx = async ({
 
   const latestBlockhash = await connection.getLatestBlockhash();
 
-  const tx = new Transaction();
   const signerPK = new PublicKey(signer);
 
-  tx.feePayer = feePayer ? new PublicKey(feePayer) : signerPK;
-  tx.recentBlockhash = latestBlockhash.blockhash;
+  const ixs = [
+    SystemProgram.nonceWithdraw({
+      noncePubkey: nonceKeypair.publicKey,
+      toPubkey: signerPK,
+      authorizedPubkey: signerPK,
+      lamports: balance,
+    }),
+  ];
 
-  const closeNonceIx = SystemProgram.nonceWithdraw({
-    noncePubkey: nonceKeypair.publicKey,
-    toPubkey: signerPK,
-    authorizedPubkey: signerPK,
-    lamports: balance,
-  });
+  const messageV0 = new TransactionMessage({
+    payerKey: feePayer ? new PublicKey(feePayer) : signerPK,
+    recentBlockhash: latestBlockhash.blockhash,
+    instructions: ixs.concat(getPrioriFeeIxs()),
+  }).compileToV0Message();
 
-  tx.add(closeNonceIx);
-  tx.add(...getFeePrioritizationIxs());
+  const tx = new VersionedTransaction(messageV0);
 
   return tx;
 };
 
-const getAccountInfo = async ({ publicKey }: { publicKey: PublicKey }) => {
-  console.log("Fetching nonce account info");
-  const accountInfo = await connection.getAccountInfo(publicKey);
-  if (!accountInfo) {
-    throw new Error(`Nonce account not found: ${publicKey.toString()}`);
-  }
-  return accountInfo;
-};
+export const createAdvanceTx = ({
+  nonceKeypair,
+  nonce,
+  signer,
+  feePayer,
+  recipient,
+  amount,
+}: {
+  nonceKeypair: Keypair;
+  nonce: string;
+  signer: string;
+  feePayer?: string;
+  recipient: string;
+  amount: number;
+}) => {
+  const signerPK = new PublicKey(signer);
 
-export const getNonceInfo = async ({ publicKey }: { publicKey: PublicKey }) => {
-  // Note: nonce account is not available immediately after creation
-  const accountInfo = await retry(() => getAccountInfo({ publicKey }), 3, 3000);
-  return NonceAccount.fromAccountData(accountInfo.data);
+  const ixs = [
+    SystemProgram.nonceAdvance({
+      authorizedPubkey: signerPK,
+      noncePubkey: nonceKeypair.publicKey,
+    }),
+    SystemProgram.transfer({
+      fromPubkey: signerPK,
+      toPubkey: new PublicKey(recipient),
+      lamports: toLamports(amount),
+    }),
+  ];
+
+  const messageV0 = new TransactionMessage({
+    payerKey: feePayer ? new PublicKey(feePayer) : signerPK,
+    recentBlockhash: nonce,
+    instructions: ixs.concat(getPrioriFeeIxs()),
+  }).compileToV0Message();
+
+  const tx = new VersionedTransaction(messageV0);
+
+  return tx;
 };
