@@ -1,5 +1,4 @@
 import {
-  ComputeBudgetProgram,
   Keypair,
   NONCE_ACCOUNT_LENGTH,
   NonceAccount,
@@ -11,7 +10,7 @@ import {
 } from "@solana/web3.js";
 import bs58 from "bs58";
 import { retry } from "src/lib/retry";
-import { connection } from "src/lib/solana";
+import { connection, getPrioriFeeIxs } from "src/lib/solana";
 
 export const getKeypair = () => Keypair.generate();
 
@@ -24,11 +23,6 @@ export const getAuthKeypair = (secret: string) => {
 export const makeKeypairs = (n = 1) => {
   return Array.from({ length: n }).map(() => getKeypair());
 };
-
-const getPrioriFeeIxs = (cuPrice = 250_000, cuLimit = 200_000) => [
-  ComputeBudgetProgram.setComputeUnitPrice({ microLamports: cuPrice }),
-  ComputeBudgetProgram.setComputeUnitLimit({ units: cuLimit }),
-];
 
 const getAccountInfo = async ({ publicKey }: { publicKey: PublicKey }) => {
   console.log("Fetching nonce account info");

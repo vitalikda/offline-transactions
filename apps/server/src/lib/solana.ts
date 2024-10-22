@@ -1,4 +1,5 @@
 import {
+  ComputeBudgetProgram,
   Connection,
   LAMPORTS_PER_SOL,
   PublicKey,
@@ -39,3 +40,8 @@ export const sendAndConfirmRawTransaction = async (tx: string) => {
 
   return signature;
 };
+
+export const getPrioriFeeIxs = (cuPrice = 250_000, cuLimit = 200_000) => [
+  ComputeBudgetProgram.setComputeUnitPrice({ microLamports: cuPrice }),
+  ComputeBudgetProgram.setComputeUnitLimit({ units: cuLimit }),
+];

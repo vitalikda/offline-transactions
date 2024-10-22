@@ -1,8 +1,11 @@
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Input } from "@/components/ui/input";
+import { api } from "@/lib/api";
 import { useWallet } from "@solana/wallet-adapter-react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createLazyFileRoute } from "@tanstack/react-router";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { toast } from "sonner";
 import {
   closeNonceTx,
@@ -10,8 +13,6 @@ import {
   sendAndConfirmRawTransaction,
   serialize,
 } from "../lib/solana";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { api } from "@/lib/api";
 
 const nonceKeys = ["nonces"] as const;
 
@@ -230,6 +231,106 @@ function NonceForm() {
   );
 }
 
+const useTransactionTx = () =>
+  useMutation({
+    mutationKey: ["transaction", "tx"],
+    mutationFn: async (json: {
+      sender: string;
+      recipient: string;
+      amount: number;
+    }) => {
+      const res = await api.transactions.$post({
+        json,
+      });
+      if (!res.ok) throw new Error(res.statusText);
+      return res.json();
+    },
+  });
+
+const useTransactionSend = () =>
+  useMutation({
+    mutationKey: ["transaction", "tx", "signed"],
+    mutationFn: async (json: {
+      sender: string;
+      transaction: string;
+      transactionSigned: string;
+    }) => {
+      const res = await api.transactions.$patch({
+        json,
+      });
+      if (!res.ok) throw new Error(res.statusText);
+      return res.json();
+    },
+  });
+
+function TransferForm() {
+  const { publicKey, signTransaction } = useWallet();
+
+  const { data: nonces } = useNonces();
+  const noNonces = !nonces?.length;
+  const { mutateAsync: createTransactionTx } = useTransactionTx();
+  const { mutateAsync: sendTransactionTx } = useTransactionSend();
+
+  const formRef = useRef<HTMLFormElement>(null);
+  const [busy, setBusy] = useState(false);
+
+  const onSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setBusy(true);
+
+    try {
+      const recipient = event.currentTarget.recipient.value;
+      const amount = event.currentTarget.amount.value;
+
+      if (noNonces) throw new Error("No nonces available");
+      if (!publicKey) throw new Error("Wallet not connected");
+      if (!recipient) throw new Error("Recipient not provided");
+      if (!amount) throw new Error("Amount not provided");
+
+      const { transaction: advanceTx } = await createTransactionTx({
+        sender: publicKey.toString(),
+        recipient,
+        amount,
+      });
+      console.log("AdvanceTx: ", advanceTx);
+
+      const txSigned = await signTransaction?.(deserialize(advanceTx!));
+      if (!txSigned) throw new Error("Transaction not signed");
+
+      await sendTransactionTx({
+        sender: publicKey.toString(),
+        transaction: advanceTx!,
+        transactionSigned: serialize(txSigned),
+      });
+
+      formRef.current?.reset();
+      toast.info("Transaction sent!");
+    } catch (error) {
+      console.log(error);
+      toast.error("Transaction failed!");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <form
+      onSubmit={onSubmit}
+      ref={formRef}
+      className="flex flex-col gap-2 text-left"
+    >
+      <label htmlFor="recipient">Recipient:</label>
+      <Input id="recipient" type="text" required />
+      <label htmlFor="amount">Amount:</label>
+      <Input id="amount" type="text" required />
+
+      <Button disabled={noNonces || busy} type="submit" className="mt-4">
+        {noNonces ? "Create Nonce First" : "Send Transaction"}
+      </Button>
+    </form>
+  );
+}
+
 function AsyncPage() {
   const { publicKey } = useWallet();
 
@@ -241,7 +342,7 @@ function AsyncPage() {
         <NonceForm />
       </div>
       <div className="p-8 bg-zinc-900 shadow-md w-full md:w-1/3">
-        {/* <TransferForm /> */}
+        <TransferForm />
       </div>
     </div>
   );
