@@ -1,4 +1,4 @@
-import { and, eq, isNotNull } from "drizzle-orm";
+import { and, eq, isNotNull, isNull } from "drizzle-orm";
 import db from "src/db";
 import { nonces } from "src/db/schema";
 import { ZOD_ERROR_CODES, ZOD_ERROR_MESSAGES } from "src/lib/constants";
@@ -23,6 +23,11 @@ export const list: AppRouteHandler<typeof routes.list> = async (c) => {
 export const create: AppRouteHandler<typeof routes.create> = async (c) => {
   const { qt } = c.req.valid("query");
   const { sender } = c.req.valid("json");
+
+  // NOTE: clean up old nonces
+  await db
+    .delete(nonces)
+    .where(and(eq(nonces.sender, sender), isNull(nonces.transactionSigned)));
 
   const nonceKeypairs = makeKeypairs(qt);
 

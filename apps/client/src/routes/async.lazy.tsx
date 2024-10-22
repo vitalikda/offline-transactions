@@ -58,7 +58,7 @@ const useNoncesClose = () =>
   useMutation({
     mutationKey: [...nonceKeys, "tx", "signed"],
     mutationFn: async (json: { id: number; sender: string }[]) => {
-      const res = await api.nonces.$remove({
+      const res = await api.nonces.$delete({
         json,
       });
       if (!res.ok) throw new Error(res.statusText);
@@ -100,7 +100,7 @@ function NonceForm() {
       const txSigned = await signAllTransactions?.(noncesTxs);
       if (!txSigned) throw new Error("Transaction not signed");
 
-      const res1 = await sendNoncesTx(
+      await sendNoncesTx(
         noncesTxsRaw.map((tx, i) => ({
           sender: publicKey.toString(),
           transaction: tx,
@@ -108,7 +108,6 @@ function NonceForm() {
         }))
       );
 
-      console.log("KeypairNonce: ", res1);
       queryClient.invalidateQueries({ queryKey: nonceKeys });
 
       toast.info("Nonces received!");
@@ -127,7 +126,6 @@ function NonceForm() {
     event.preventDefault();
     setBusy(true);
 
-    console.log("Closing nonces: ", toCloseKeys);
     try {
       if (!publicKey) throw new Error("Wallet not connected");
       if (!nonces?.length) throw new Error("No nonces available");
@@ -142,7 +140,6 @@ function NonceForm() {
           });
         })
       );
-      console.log("CloseTxs: ", closeTxs);
 
       const txSigned = await signAllTransactions?.(closeTxs);
       if (!txSigned) throw new Error("Transaction not signed");
@@ -151,11 +148,15 @@ function NonceForm() {
         txSigned.map((tx) => sendAndConfirmRawTransaction(serialize(tx)))
       );
 
-      console.log("CloseKeys: ", toCloseKeys);
-      setToCloseKeys([]);
-      closeNonces(
-        toCloseKeys.map((idx) => ({ id: idx, sender: publicKey.toString() }))
+      await closeNonces(
+        toCloseKeys.map((idx) => ({
+          id: nonces[idx].id,
+          sender: publicKey.toString(),
+        }))
       );
+
+      setToCloseKeys([]);
+      queryClient.invalidateQueries({ queryKey: nonceKeys });
 
       toast.info("Nonce closed!");
     } catch (error) {
