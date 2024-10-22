@@ -1,7 +1,7 @@
+import { z } from "zod";
 import { integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 import { isSolanaAddress } from "src/lib/solana";
-import { z } from "zod";
 
 export const nonces = sqliteTable("nonces", {
   id: integer("id", { mode: "number" }).primaryKey({ autoIncrement: true }),
@@ -13,43 +13,30 @@ export const nonces = sqliteTable("nonces", {
     .$onUpdate(() => new Date()),
 
   sender: text("sender").notNull(),
-  recipient: text("recipient").notNull(),
-  amount: integer("amount", { mode: "number" }).notNull(),
-  nonce: text("nonce").notNull(),
-  transaction: text("transaction").notNull(),
-  signature: text("signature"),
+  noncePublicKey: text("nonce_publicKey").notNull(),
+  transaction: text("transaction"),
+  transactionSigned: text("transaction_signed"),
 });
 
-export const selectNonceSchema = createSelectSchema(nonces);
+export const senderType = z.string().refine(isSolanaAddress, "Invalid address");
+
+export const selectNonceSchema = createSelectSchema(nonces, {
+  transactionSigned: z.string(),
+});
 
 export const insertNonceSchema = createInsertSchema(nonces, {
-  sender: (s) => s.sender.refine(isSolanaAddress, "Invalid address"),
-  recipient: (s) => s.recipient.refine(isSolanaAddress, "Invalid address"),
-  amount: z.coerce.number(),
+  sender: senderType,
 }).omit({
-  id: true,
   createdAt: true,
   updatedAt: true,
-
-  nonce: true,
-  transaction: true,
-  signature: true,
+  noncePublicKey: true,
 });
 
-export const patchNonceSchema = createInsertSchema(nonces, {
-  signature: z.string(),
-})
-  .required({
-    signature: true,
-  })
-  .omit({
-    id: true,
-    createdAt: true,
-    updatedAt: true,
+export const patchNonceSchema = insertNonceSchema.required({
+  transaction: true,
+  transactionSigned: true,
+});
 
-    nonce: true,
-    transaction: true,
-    sender: true,
-    recipient: true,
-    amount: true,
-  });
+export const removeNonceSchema = insertNonceSchema.required({
+  id: true,
+});
