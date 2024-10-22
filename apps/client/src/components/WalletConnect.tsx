@@ -4,14 +4,20 @@ import { WalletMultiButton } from "@solana/wallet-adapter-react-ui";
 export const WalletConnect = ({ children }: { children: React.ReactNode }) => {
   const { publicKey } = useWallet();
 
-  if (!publicKey) return <WalletMultiButton />;
+  if (!publicKey)
+    return (
+      <div className="absolute inset-4 flex justify-center items-center">
+        <WalletMultiButton />
+      </div>
+    );
 
   return (
     <>
-      <nav style={{ position: "absolute", top: "2rem", right: "2rem" }}>
+      <div className="absolute top-4 right-4">
         <WalletMultiButton />
-      </nav>
-      <main>{children}</main>
+      </div>
+
+      {children}
     </>
   );
 };
