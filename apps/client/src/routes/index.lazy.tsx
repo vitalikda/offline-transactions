@@ -19,7 +19,6 @@ import {
   createAdvanceTx,
   createNonceTx,
   encodeKeypair,
-  getAuthKeypair,
   getNonceInfo,
   makeKeypairs,
   sendAndConfirmRawTransaction,
@@ -106,7 +105,7 @@ function NonceForm() {
       const newNonces = await Promise.all(
         nonceKeypairs.map(async (keypair, i) => {
           console.log(`Keypair:${i}: ${keypair.publicKey}`);
-          const nonceAccount = await getNonceInfo(keypair);
+          const nonceAccount = await getNonceInfo(keypair.publicKey.toString());
           console.log(`Nonce:${i}: ${nonceAccount.nonce}`);
           return { keypair, nonce: nonceAccount.nonce };
         })
@@ -146,7 +145,7 @@ function NonceForm() {
           const nonce = nonces[key];
           if (!nonce) throw new Error("Nonce not found");
           return closeNonceTx({
-            nonceKeypair: getAuthKeypair(nonce.secretKey),
+            noncePublicKey: nonce.publicKey,
             signer: publicKey.toString(),
           });
         })
@@ -261,9 +260,8 @@ function TransferForm() {
       const [nonceKey, nonce] = Object.entries(nonces)[selectId];
       if (!nonce) throw new Error("Nonce not found");
 
-      const nonceKeypair = getAuthKeypair(nonce.secretKey);
       const advanceTx = createAdvanceTx({
-        nonceKeypair,
+        noncePublicKey: nonce.publicKey,
         nonce: nonce.nonce,
         signer: publicKey.toString(),
         recipient,
@@ -275,7 +273,7 @@ function TransferForm() {
       if (!signedTx) throw new Error("Transaction not signed");
 
       await sendAndConfirmRawTransaction(serialize(signedTx));
-      const newNonce = await getNonceInfo(nonceKeypair);
+      const newNonce = await getNonceInfo(nonce.publicKey);
       addNonces([{ ...nonce, nonce: newNonce.nonce }]);
       closeNonces([nonceKey as NonceKey]);
 

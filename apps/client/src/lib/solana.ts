@@ -68,6 +68,27 @@ const getPrioriFeeIxs = (cuPrice = 250_000, cuLimit = 200_000) => [
   ComputeBudgetProgram.setComputeUnitLimit({ units: cuLimit }),
 ];
 
+// TODO: does not work - tx simulation throws error
+// const getOptimalPrioriFeeIxs = async (
+//   ixs: Array<TransactionInstruction>,
+//   senderPK: PublicKey,
+//   lookupTables: Array<AddressLookupTableAccount> = []
+// ) => {
+//   const [microLamports, units] = await Promise.all([
+//     connection.getRecentPrioritizationFees(),
+//     getSimulationComputeUnits(connection, ixs, senderPK, lookupTables),
+//   ]);
+//   console.log("microLamports: ", microLamports);
+//   console.log("units: ", units);
+//   const cuPrice = Math.floor(
+//     microLamports.reduce((acc, cur) => acc + cur.prioritizationFee, 0) /
+//       microLamports.length
+//   );
+//   const cuLimit = units ?? 300;
+//   console.log("cuPrice/cuLimit: ", { cuPrice, cuLimit });
+//   return getPrioriFeeIxs(cuPrice, cuLimit);
+// };
+
 const getAccountInfo = async ({ publicKey }: { publicKey: PublicKey }) => {
   console.log("Fetching nonce account info");
   const accountInfo = await connection.getAccountInfo(publicKey);
@@ -77,9 +98,13 @@ const getAccountInfo = async ({ publicKey }: { publicKey: PublicKey }) => {
   return accountInfo;
 };
 
-export const getNonceInfo = async ({ publicKey }: { publicKey: PublicKey }) => {
+export const getNonceInfo = async (noncePublicKey: string) => {
   // Note: nonce account is not available immediately after creation
-  const accountInfo = await retry(() => getAccountInfo({ publicKey }), 3, 3000);
+  const accountInfo = await retry(
+    () => getAccountInfo({ publicKey: new PublicKey(noncePublicKey) }),
+    3,
+    3000
+  );
   return NonceAccount.fromAccountData(accountInfo.data);
 };
 
@@ -128,26 +153,26 @@ export const createNonceTx = async ({
 };
 
 export const closeNonceTx = async ({
-  nonceKeypair,
+  noncePublicKey,
   signer,
   feePayer,
 }: {
-  nonceKeypair: Keypair;
+  noncePublicKey: string;
   signer: string;
   feePayer?: string;
 }) => {
-  const balance = await connection.getBalance(nonceKeypair.publicKey);
+  const noncePK = new PublicKey(noncePublicKey);
+
+  const balance = await connection.getBalance(noncePK);
   if (!balance) {
-    throw new Error(
-      `Nonce account not found: ${nonceKeypair.publicKey.toString()}`
-    );
+    throw new Error(`Nonce account not found: ${noncePublicKey}`);
   }
 
   const rent =
     await connection.getMinimumBalanceForRentExemption(NONCE_ACCOUNT_LENGTH);
   if (balance < rent) {
     throw new Error(
-      `Nonce account balance for ${nonceKeypair.publicKey.toString()} is less than rent: ${balance} < ${rent}`
+      `Nonce account balance for ${noncePublicKey} is less than rent: ${balance} < ${rent}`
     );
   }
 
@@ -157,7 +182,7 @@ export const closeNonceTx = async ({
 
   const ixs = [
     SystemProgram.nonceWithdraw({
-      noncePubkey: nonceKeypair.publicKey,
+      noncePubkey: noncePK,
       toPubkey: signerPK,
       authorizedPubkey: signerPK,
       lamports: balance,
@@ -176,14 +201,14 @@ export const closeNonceTx = async ({
 };
 
 export const createAdvanceTx = ({
-  nonceKeypair,
+  noncePublicKey,
   nonce,
   signer,
   feePayer,
   recipient,
   amount,
 }: {
-  nonceKeypair: Keypair;
+  noncePublicKey: string;
   nonce: string;
   signer: string;
   feePayer?: string;
@@ -191,11 +216,12 @@ export const createAdvanceTx = ({
   amount: number;
 }) => {
   const signerPK = new PublicKey(signer);
+  const noncePK = new PublicKey(noncePublicKey);
 
   const ixs = [
     SystemProgram.nonceAdvance({
       authorizedPubkey: signerPK,
-      noncePubkey: nonceKeypair.publicKey,
+      noncePubkey: noncePK,
     }),
     SystemProgram.transfer({
       fromPubkey: signerPK,
