@@ -13,23 +13,47 @@ import { createFileRoute } from '@tanstack/react-router'
 // Import Routes
 
 import { Route as rootRoute } from './routes/__root'
+import { Route as SolImport } from './routes/sol'
+import { Route as EthImport } from './routes/eth'
+import { Route as IndexImport } from './routes/index'
 
 // Create Virtual Routes
 
-const AsyncLazyImport = createFileRoute('/async')()
-const IndexLazyImport = createFileRoute('/')()
+const SolIndexLazyImport = createFileRoute('/sol/')()
+const EthIndexLazyImport = createFileRoute('/eth/')()
+const SolAsyncLazyImport = createFileRoute('/sol/async')()
 
 // Create/Update Routes
 
-const AsyncLazyRoute = AsyncLazyImport.update({
-  path: '/async',
+const SolRoute = SolImport.update({
+  path: '/sol',
   getParentRoute: () => rootRoute,
-} as any).lazy(() => import('./routes/async.lazy').then((d) => d.Route))
+} as any)
 
-const IndexLazyRoute = IndexLazyImport.update({
+const EthRoute = EthImport.update({
+  path: '/eth',
+  getParentRoute: () => rootRoute,
+} as any)
+
+const IndexRoute = IndexImport.update({
   path: '/',
   getParentRoute: () => rootRoute,
-} as any).lazy(() => import('./routes/index.lazy').then((d) => d.Route))
+} as any)
+
+const SolIndexLazyRoute = SolIndexLazyImport.update({
+  path: '/',
+  getParentRoute: () => SolRoute,
+} as any).lazy(() => import('./routes/sol.index.lazy').then((d) => d.Route))
+
+const EthIndexLazyRoute = EthIndexLazyImport.update({
+  path: '/',
+  getParentRoute: () => EthRoute,
+} as any).lazy(() => import('./routes/eth.index.lazy').then((d) => d.Route))
+
+const SolAsyncLazyRoute = SolAsyncLazyImport.update({
+  path: '/async',
+  getParentRoute: () => SolRoute,
+} as any).lazy(() => import('./routes/sol.async.lazy').then((d) => d.Route))
 
 // Populate the FileRoutesByPath interface
 
@@ -39,54 +63,116 @@ declare module '@tanstack/react-router' {
       id: '/'
       path: '/'
       fullPath: '/'
-      preLoaderRoute: typeof IndexLazyImport
+      preLoaderRoute: typeof IndexImport
       parentRoute: typeof rootRoute
     }
-    '/async': {
-      id: '/async'
-      path: '/async'
-      fullPath: '/async'
-      preLoaderRoute: typeof AsyncLazyImport
+    '/eth': {
+      id: '/eth'
+      path: '/eth'
+      fullPath: '/eth'
+      preLoaderRoute: typeof EthImport
       parentRoute: typeof rootRoute
+    }
+    '/sol': {
+      id: '/sol'
+      path: '/sol'
+      fullPath: '/sol'
+      preLoaderRoute: typeof SolImport
+      parentRoute: typeof rootRoute
+    }
+    '/sol/async': {
+      id: '/sol/async'
+      path: '/async'
+      fullPath: '/sol/async'
+      preLoaderRoute: typeof SolAsyncLazyImport
+      parentRoute: typeof SolImport
+    }
+    '/eth/': {
+      id: '/eth/'
+      path: '/'
+      fullPath: '/eth/'
+      preLoaderRoute: typeof EthIndexLazyImport
+      parentRoute: typeof EthImport
+    }
+    '/sol/': {
+      id: '/sol/'
+      path: '/'
+      fullPath: '/sol/'
+      preLoaderRoute: typeof SolIndexLazyImport
+      parentRoute: typeof SolImport
     }
   }
 }
 
 // Create and export the route tree
 
+interface EthRouteChildren {
+  EthIndexLazyRoute: typeof EthIndexLazyRoute
+}
+
+const EthRouteChildren: EthRouteChildren = {
+  EthIndexLazyRoute: EthIndexLazyRoute,
+}
+
+const EthRouteWithChildren = EthRoute._addFileChildren(EthRouteChildren)
+
+interface SolRouteChildren {
+  SolAsyncLazyRoute: typeof SolAsyncLazyRoute
+  SolIndexLazyRoute: typeof SolIndexLazyRoute
+}
+
+const SolRouteChildren: SolRouteChildren = {
+  SolAsyncLazyRoute: SolAsyncLazyRoute,
+  SolIndexLazyRoute: SolIndexLazyRoute,
+}
+
+const SolRouteWithChildren = SolRoute._addFileChildren(SolRouteChildren)
+
 export interface FileRoutesByFullPath {
-  '/': typeof IndexLazyRoute
-  '/async': typeof AsyncLazyRoute
+  '/': typeof IndexRoute
+  '/eth': typeof EthRouteWithChildren
+  '/sol': typeof SolRouteWithChildren
+  '/sol/async': typeof SolAsyncLazyRoute
+  '/eth/': typeof EthIndexLazyRoute
+  '/sol/': typeof SolIndexLazyRoute
 }
 
 export interface FileRoutesByTo {
-  '/': typeof IndexLazyRoute
-  '/async': typeof AsyncLazyRoute
+  '/': typeof IndexRoute
+  '/sol/async': typeof SolAsyncLazyRoute
+  '/eth': typeof EthIndexLazyRoute
+  '/sol': typeof SolIndexLazyRoute
 }
 
 export interface FileRoutesById {
   __root__: typeof rootRoute
-  '/': typeof IndexLazyRoute
-  '/async': typeof AsyncLazyRoute
+  '/': typeof IndexRoute
+  '/eth': typeof EthRouteWithChildren
+  '/sol': typeof SolRouteWithChildren
+  '/sol/async': typeof SolAsyncLazyRoute
+  '/eth/': typeof EthIndexLazyRoute
+  '/sol/': typeof SolIndexLazyRoute
 }
 
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/async'
+  fullPaths: '/' | '/eth' | '/sol' | '/sol/async' | '/eth/' | '/sol/'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/async'
-  id: '__root__' | '/' | '/async'
+  to: '/' | '/sol/async' | '/eth' | '/sol'
+  id: '__root__' | '/' | '/eth' | '/sol' | '/sol/async' | '/eth/' | '/sol/'
   fileRoutesById: FileRoutesById
 }
 
 export interface RootRouteChildren {
-  IndexLazyRoute: typeof IndexLazyRoute
-  AsyncLazyRoute: typeof AsyncLazyRoute
+  IndexRoute: typeof IndexRoute
+  EthRoute: typeof EthRouteWithChildren
+  SolRoute: typeof SolRouteWithChildren
 }
 
 const rootRouteChildren: RootRouteChildren = {
-  IndexLazyRoute: IndexLazyRoute,
-  AsyncLazyRoute: AsyncLazyRoute,
+  IndexRoute: IndexRoute,
+  EthRoute: EthRouteWithChildren,
+  SolRoute: SolRouteWithChildren,
 }
 
 export const routeTree = rootRoute
@@ -102,14 +188,37 @@ export const routeTree = rootRoute
       "filePath": "__root.tsx",
       "children": [
         "/",
-        "/async"
+        "/eth",
+        "/sol"
       ]
     },
     "/": {
-      "filePath": "index.lazy.tsx"
+      "filePath": "index.tsx"
     },
-    "/async": {
-      "filePath": "async.lazy.tsx"
+    "/eth": {
+      "filePath": "eth.tsx",
+      "children": [
+        "/eth/"
+      ]
+    },
+    "/sol": {
+      "filePath": "sol.tsx",
+      "children": [
+        "/sol/async",
+        "/sol/"
+      ]
+    },
+    "/sol/async": {
+      "filePath": "sol.async.lazy.tsx",
+      "parent": "/sol"
+    },
+    "/eth/": {
+      "filePath": "eth.index.lazy.tsx",
+      "parent": "/eth"
+    },
+    "/sol/": {
+      "filePath": "sol.index.lazy.tsx",
+      "parent": "/sol"
     }
   }
 }

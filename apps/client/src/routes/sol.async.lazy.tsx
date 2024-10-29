@@ -48,7 +48,11 @@ const useNoncesSend = () =>
   useMutation({
     mutationKey: [...nonceKeys, "tx", "signed"],
     mutationFn: async (
-      json: { sender: string; transaction: string; transactionSigned: string }[]
+      json: {
+        sender: string;
+        transaction: string;
+        transactionSigned: string;
+      }[]
     ) => {
       const res = await api.nonces.$patch({
         json,
@@ -503,6 +507,6 @@ function AsyncPage() {
   );
 }
 
-export const Route = createLazyFileRoute("/async")({
+export const Route = createLazyFileRoute("/sol/async")({
   component: AsyncPage,
 });

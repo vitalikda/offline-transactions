@@ -344,6 +344,6 @@ function IndexPage() {
   );
 }
 
-export const Route = createLazyFileRoute("/")({
+export const Route = createLazyFileRoute("/sol/")({
   component: IndexPage,
 });
