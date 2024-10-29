@@ -8,12 +8,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useWallet } from "@solana/wallet-adapter-react";
-import { createLazyFileRoute } from "@tanstack/react-router";
-import { useRef, useState } from "react";
-import { toast } from "sonner";
-import { create } from "zustand";
-import { persist } from "zustand/middleware";
 import {
   closeNonceTx,
   createAdvanceTx,
@@ -23,8 +17,14 @@ import {
   makeKeypairs,
   sendAndConfirmRawTransaction,
   serialize,
-} from "../lib/solana";
-import { toKey } from "../lib/utils";
+} from "@/lib/solana";
+import { toKey } from "@/lib/utils";
+import { useWallet } from "@solana/wallet-adapter-react";
+import { createLazyFileRoute } from "@tanstack/react-router";
+import { useRef, useState } from "react";
+import { toast } from "sonner";
+import { create } from "zustand";
+import { persist } from "zustand/middleware";
 
 type NonceKey = ReturnType<typeof toKey>;
 type Nonce = {
