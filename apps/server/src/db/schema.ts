@@ -53,6 +53,7 @@ export const transactions = sqliteTable("transactions", {
   amount: integer("amount", { mode: "number" }).notNull(),
   transaction: text("transaction"),
   transactionSigned: text("transaction_signed"),
+  transactionExecuted: text("transaction_executed"),
 });
 
 export const selectTransactionSchema = createSelectSchema(transactions);
@@ -76,4 +77,17 @@ export const patchTransactionSchema = createInsertSchema(transactions)
   .required({
     transaction: true,
     transactionSigned: true,
+  });
+
+export const executeTransactionSchema = createInsertSchema(transactions, {
+  sender: senderType,
+})
+  .omit({
+    createdAt: true,
+    updatedAt: true,
+    recipient: true,
+    amount: true,
+  })
+  .required({
+    id: true,
   });

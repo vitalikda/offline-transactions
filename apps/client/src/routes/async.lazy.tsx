@@ -2,6 +2,8 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { api } from "@/lib/api";
+import { copyToClipboard } from "@/lib/utils";
+import { CheckIcon, CopyIcon, ExternalLinkIcon } from "@radix-ui/react-icons";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createLazyFileRoute } from "@tanstack/react-router";
@@ -15,6 +17,7 @@ import {
 } from "../lib/solana";
 
 const nonceKeys = ["nonces"] as const;
+const transactionKeys = ["transactions"] as const;
 
 const useNonces = (sender?: string) =>
   useQuery({
@@ -231,9 +234,9 @@ function NonceForm() {
   );
 }
 
-const useTransactionTx = () =>
+const useTransaction = () =>
   useMutation({
-    mutationKey: ["transaction", "tx"],
+    mutationKey: [...transactionKeys, "tx"],
     mutationFn: async (json: {
       sender: string;
       recipient: string;
@@ -249,7 +252,7 @@ const useTransactionTx = () =>
 
 const useTransactionSend = () =>
   useMutation({
-    mutationKey: ["transaction", "tx", "signed"],
+    mutationKey: [...transactionKeys, "tx", "signed"],
     mutationFn: async (json: {
       sender: string;
       transaction: string;
@@ -264,12 +267,13 @@ const useTransactionSend = () =>
   });
 
 function TransferForm() {
+  const queryClient = useQueryClient();
   const { publicKey, signTransaction } = useWallet();
 
   const { data: nonces } = useNonces();
   const noNonces = !nonces?.length;
-  const { mutateAsync: createTransactionTx } = useTransactionTx();
-  const { mutateAsync: sendTransactionTx } = useTransactionSend();
+  const { mutateAsync: createTransaction } = useTransaction();
+  const { mutateAsync: sendTransaction } = useTransactionSend();
 
   const formRef = useRef<HTMLFormElement>(null);
   const [busy, setBusy] = useState(false);
@@ -287,7 +291,7 @@ function TransferForm() {
       if (!recipient) throw new Error("Recipient not provided");
       if (!amount) throw new Error("Amount not provided");
 
-      const { transaction: advanceTx } = await createTransactionTx({
+      const { transaction: advanceTx } = await createTransaction({
         sender: publicKey.toString(),
         recipient,
         amount,
@@ -297,13 +301,15 @@ function TransferForm() {
       const txSigned = await signTransaction?.(deserialize(advanceTx!));
       if (!txSigned) throw new Error("Transaction not signed");
 
-      await sendTransactionTx({
+      await sendTransaction({
         sender: publicKey.toString(),
         transaction: advanceTx!,
         transactionSigned: serialize(txSigned),
       });
 
       formRef.current?.reset();
+      queryClient.invalidateQueries({ queryKey: transactionKeys });
+
       toast.info("Transaction sent!");
     } catch (error) {
       console.log(error);
@@ -331,6 +337,152 @@ function TransferForm() {
   );
 }
 
+const useTransactions = (sender?: string) =>
+  useQuery({
+    enabled: !!sender,
+    queryKey: transactionKeys,
+    queryFn: async () => {
+      if (!sender) throw new Error("Sender not provided");
+      const res = await api.transactions.$get({ query: { sender } });
+      if (!res.ok) throw new Error(res.statusText);
+      return res.json();
+    },
+  });
+
+const useTransactionsExecute = () =>
+  useMutation({
+    mutationKey: [...transactionKeys, "execute"],
+    mutationFn: async (json: { id: number; sender: string }[]) => {
+      const res = await api.transactions.execute.$patch({
+        json,
+      });
+      if (!res.ok) throw new Error(res.statusText);
+      return res.json();
+    },
+  });
+
+function Transfers() {
+  const queryClient = useQueryClient();
+  const { publicKey } = useWallet();
+
+  const { data: transactions } = useTransactions(publicKey?.toString());
+  const { mutateAsync: executeTransactions } = useTransactionsExecute();
+
+  const [busy, setBusy] = useState(false);
+  const [toExecuteKeys, setToExecuteKeys] = useState<number[]>([]);
+
+  const onSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setBusy(true);
+
+    try {
+      if (!publicKey) throw new Error("Wallet not connected");
+
+      await executeTransactions(
+        toExecuteKeys.map((idx) => ({
+          id: transactions![idx].id,
+          sender: publicKey?.toString(),
+        }))
+      );
+
+      setToExecuteKeys([]);
+      queryClient.invalidateQueries({ queryKey: transactionKeys });
+
+      toast.info("Transactions executed!");
+    } catch (error) {
+      console.log(error);
+      toast.error("Failed to execute transactions!");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (!transactions?.length) {
+    return (
+      <div>
+        <span>No transactions yet</span>
+      </div>
+    );
+  }
+
+  return (
+    <form onSubmit={onSubmit} className="flex flex-col gap-2">
+      {transactions.map(
+        ({ id, transactionSigned, transactionExecuted }, idx) => {
+          if (!transactionSigned) return null;
+          return (
+            <div key={id} className="flex space-x-2 items-center">
+              {transactionExecuted ? (
+                <div>
+                  <CheckIcon className="h-4 w-4 text-green-500" />
+                </div>
+              ) : (
+                <Checkbox
+                  id={`${id}-${transactionSigned}`}
+                  onCheckedChange={(v) => {
+                    if (v) {
+                      setToExecuteKeys((s) => [...s, idx]);
+                    } else {
+                      setToExecuteKeys((s) => s.filter((n) => n !== idx));
+                    }
+                  }}
+                />
+              )}
+              <div className="flex-1 flex flex-col space-y-1">
+                <label
+                  htmlFor={`${id}-${transactionSigned}`}
+                  className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 inline-flex gap-1 items-baseline"
+                >
+                  {id}.{" "}
+                  <span className="text-xs text-zinc-400 font-medium leading-none">
+                    {transactionSigned.slice(0, 36)}...
+                  </span>
+                </label>
+              </div>
+              <div className="flex gap-1 items-center">
+                <Button
+                  type="button"
+                  onClick={() =>
+                    copyToClipboard(transactionSigned).then((t) =>
+                      t
+                        ? toast.info("Text copied!")
+                        : toast.error(
+                            "Clipboard is not available! Check browser logs."
+                          )
+                    )
+                  }
+                  size="icon"
+                  variant="ghost"
+                >
+                  <CopyIcon className="h-4 w-4" />
+                </Button>
+                {!!transactionExecuted && (
+                  <Button size="icon" variant="ghost" asChild>
+                    <a
+                      href={`https://solana.fm/tx/${transactionExecuted}`}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      <ExternalLinkIcon className="h-4 w-4" />
+                    </a>
+                  </Button>
+                )}
+              </div>
+            </div>
+          );
+        }
+      )}
+      <Button
+        disabled={!toExecuteKeys.length || busy}
+        type="submit"
+        variant="outline"
+      >
+        Execute Transactions
+      </Button>
+    </form>
+  );
+}
+
 function AsyncPage() {
   const { publicKey } = useWallet();
 
@@ -338,11 +490,14 @@ function AsyncPage() {
 
   return (
     <div className="flex flex-wrap gap-4">
-      <div className="p-8 bg-zinc-900 shadow-md w-full md:w-1/3">
+      <div className="p-8 bg-zinc-900 shadow-md w-full md:w-1/4">
         <NonceForm />
       </div>
-      <div className="p-8 bg-zinc-900 shadow-md w-full md:w-1/3">
+      <div className="p-8 bg-zinc-900 shadow-md w-full md:w-1/4">
         <TransferForm />
+      </div>
+      <div className="p-8 bg-zinc-900 shadow-md w-full md:w-1/4">
+        <Transfers />
       </div>
     </div>
   );
