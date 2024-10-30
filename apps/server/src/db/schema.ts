@@ -1,21 +1,19 @@
-import { z } from "zod";
 import { integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 import { isSolanaAddress } from "src/lib/solana";
+import { z } from "zod";
 
 export const nonces = sqliteTable("nonces", {
-  id: integer("id", { mode: "number" }).primaryKey({ autoIncrement: true }),
-  createdAt: integer("created_at", { mode: "timestamp" }).$defaultFn(
-    () => new Date()
-  ),
-  updatedAt: integer("updated_at", { mode: "timestamp" })
+  id: integer({ mode: "number" }).primaryKey({ autoIncrement: true }),
+  createdAt: integer({ mode: "timestamp" }).$defaultFn(() => new Date()),
+  updatedAt: integer({ mode: "timestamp" })
     .$defaultFn(() => new Date())
     .$onUpdate(() => new Date()),
 
-  sender: text("sender").notNull(),
-  noncePublicKey: text("nonce_publicKey").notNull(),
-  transaction: text("transaction"),
-  transactionSigned: text("transaction_signed"),
+  sender: text().notNull(),
+  noncePublicKey: text().notNull(),
+  transaction: text(),
+  transactionSigned: text(),
 });
 
 export const senderType = z.string().refine(isSolanaAddress, "Invalid address");
@@ -40,20 +38,18 @@ export const removeNonceSchema = insertNonceSchema.required({
 });
 
 export const transactions = sqliteTable("transactions", {
-  id: integer("id", { mode: "number" }).primaryKey({ autoIncrement: true }),
-  createdAt: integer("created_at", { mode: "timestamp" }).$defaultFn(
-    () => new Date()
-  ),
-  updatedAt: integer("updated_at", { mode: "timestamp" })
+  id: integer({ mode: "number" }).primaryKey({ autoIncrement: true }),
+  createdAt: integer({ mode: "timestamp" }).$defaultFn(() => new Date()),
+  updatedAt: integer({ mode: "timestamp" })
     .$defaultFn(() => new Date())
     .$onUpdate(() => new Date()),
 
-  sender: text("sender").notNull(),
-  recipient: text("recipient").notNull(),
-  amount: integer("amount", { mode: "number" }).notNull(),
-  transaction: text("transaction"),
-  transactionSigned: text("transaction_signed"),
-  transactionExecuted: text("transaction_executed"),
+  sender: text().notNull(),
+  recipient: text().notNull(),
+  amount: integer({ mode: "number" }).notNull(),
+  transaction: text(),
+  transactionSigned: text(),
+  transactionExecuted: text(),
 });
 
 export const selectTransactionSchema = createSelectSchema(transactions);
