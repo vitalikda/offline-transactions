@@ -4,17 +4,14 @@ This template provides a minimal setup to get Solan Wallet Adapter integrated wi
 
 ## Solana + Durable Nonce
 
+![diagram](/diagram.png)
+
 ### NOTES
 
 - nonce hash is time based
-- nonce can be re-used
+- nonce account can be re-used
 
 ### TODO
 
-- [x] user has to be an authority
-- [x] close nonce account after use
-- [x] fix advance nonce tx
-- [x] get new hash after nonce is used
-- [x] update server
-- [ ] priority fees
-- [ ] safe/squads account
+- [ ] durable nonce with safe/squads account - https://x.com/SquadsProtocol/status/1837047617127358585
+- [ ] schedule transactions on Ethereum
