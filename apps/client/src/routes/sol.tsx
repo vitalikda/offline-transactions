@@ -9,14 +9,19 @@ export const Route = createFileRoute("/sol")({
       <div className="p-4 flex flex-col gap-8">
         <nav className="p-2 flex gap-2">
           <Button variant="ghost" size="icon" asChild>
-            <Link to="/" className="[&.active]:font-bold [&.active]:bg-accent">
+            <Link
+              to="/"
+              activeProps={{ className: "font-bold bg-accent" }}
+              activeOptions={{ exact: true }}
+            >
               <HomeIcon className="w-4 h-4" />
             </Link>
           </Button>
           <Button variant="ghost" asChild>
             <Link
               to="/sol"
-              className="[&.active]:font-bold [&.active]:bg-accent"
+              activeProps={{ className: "font-bold bg-accent" }}
+              activeOptions={{ exact: true }}
             >
               Client Only
             </Link>
@@ -24,7 +29,8 @@ export const Route = createFileRoute("/sol")({
           <Button variant="ghost" asChild>
             <Link
               to="/sol/async"
-              className="[&.active]:font-bold [&.active]:bg-accent"
+              activeProps={{ className: "font-bold bg-accent" }}
+              activeOptions={{ exact: true }}
             >
               Client + Server
             </Link>
