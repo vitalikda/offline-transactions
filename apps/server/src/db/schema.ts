@@ -1,19 +1,28 @@
-import { integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
+import { integer as int, sqliteTable, text } from "drizzle-orm/sqlite-core";
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 import { isSolanaAddress } from "src/lib/solana";
 import { z } from "zod";
 
-export const nonces = sqliteTable("nonces", {
-  id: integer({ mode: "number" }).primaryKey({ autoIncrement: true }),
-  createdAt: integer({ mode: "timestamp" }).$defaultFn(() => new Date()),
-  updatedAt: integer({ mode: "timestamp" })
+const common = {
+  id: int({ mode: "number" }).primaryKey({ autoIncrement: true }),
+  createdAt: int({ mode: "timestamp" }).$defaultFn(() => new Date()),
+  updatedAt: int({ mode: "timestamp" })
     .$defaultFn(() => new Date())
     .$onUpdate(() => new Date()),
+};
 
+export const authorities = sqliteTable("authorities", {
+  ...common,
+  sender: text().notNull(),
+  nonceSecretKey: text().notNull(),
+  noncePublicKey: text().notNull(),
+});
+
+export const nonces = sqliteTable("nonces", {
+  ...common,
   sender: text().notNull(),
   noncePublicKey: text().notNull(),
   transaction: text(),
-  transactionSigned: text(),
 });
 
 export const senderType = z.string().refine(isSolanaAddress, "Invalid address");
@@ -25,31 +34,16 @@ export const insertNonceSchema = createInsertSchema(nonces, {
 }).omit({
   createdAt: true,
   updatedAt: true,
-  noncePublicKey: true,
-});
-
-export const patchNonceSchema = insertNonceSchema.required({
-  transaction: true,
-  transactionSigned: true,
-});
-
-export const removeNonceSchema = insertNonceSchema.required({
-  id: true,
 });
 
 export const transactions = sqliteTable("transactions", {
-  id: integer({ mode: "number" }).primaryKey({ autoIncrement: true }),
-  createdAt: integer({ mode: "timestamp" }).$defaultFn(() => new Date()),
-  updatedAt: integer({ mode: "timestamp" })
-    .$defaultFn(() => new Date())
-    .$onUpdate(() => new Date()),
-
+  ...common,
   sender: text().notNull(),
   recipient: text().notNull(),
-  amount: integer({ mode: "number" }).notNull(),
+  amount: int({ mode: "number" }).notNull(),
+  noncePublicKey: text().notNull(),
+  signature: text(),
   transaction: text(),
-  transactionSigned: text(),
-  transactionExecuted: text(),
 });
 
 export const selectTransactionSchema = createSelectSchema(transactions);
@@ -61,29 +55,5 @@ export const insertTransactionSchema = createInsertSchema(transactions, {
 }).omit({
   createdAt: true,
   updatedAt: true,
+  noncePublicKey: true,
 });
-
-export const patchTransactionSchema = createInsertSchema(transactions)
-  .omit({
-    createdAt: true,
-    updatedAt: true,
-    recipient: true,
-    amount: true,
-  })
-  .required({
-    transaction: true,
-    transactionSigned: true,
-  });
-
-export const executeTransactionSchema = createInsertSchema(transactions, {
-  sender: senderType,
-})
-  .omit({
-    createdAt: true,
-    updatedAt: true,
-    recipient: true,
-    amount: true,
-  })
-  .required({
-    id: true,
-  });

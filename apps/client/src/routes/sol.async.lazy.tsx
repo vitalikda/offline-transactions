@@ -2,12 +2,7 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { api } from "@/lib/api";
-import {
-  closeNonceTx,
-  deserialize,
-  sendAndConfirmRawTransaction,
-  serialize,
-} from "@/lib/solana";
+import { deserialize, serialize } from "@/lib/solana";
 import { copyToClipboard } from "@/lib/utils";
 import { CheckIcon, CopyIcon, ExternalLinkIcon } from "@radix-ui/react-icons";
 import { useWallet } from "@solana/wallet-adapter-react";
@@ -48,11 +43,7 @@ const useNoncesSend = () =>
   useMutation({
     mutationKey: [...nonceKeys, "tx", "signed"],
     mutationFn: async (
-      json: {
-        sender: string;
-        transaction: string;
-        transactionSigned: string;
-      }[]
+      json: Parameters<typeof api.nonces.$patch>[0]["json"]
     ) => {
       const res = await api.nonces.$patch({
         json,
@@ -64,13 +55,29 @@ const useNoncesSend = () =>
 
 const useNoncesClose = () =>
   useMutation({
-    mutationKey: [...nonceKeys, "tx", "signed"],
-    mutationFn: async (json: { id: number; sender: string }[]) => {
-      const res = await api.nonces.$delete({
+    mutationKey: [...nonceKeys, "tx", "close"],
+    mutationFn: async (
+      json: Parameters<typeof api.nonces.remove.$post>[0]["json"]
+    ) => {
+      const res = await api.nonces.remove.$post({
         json,
       });
       if (!res.ok) throw new Error(res.statusText);
       return res.json();
+    },
+  });
+
+const useNoncesCloseConfirm = () =>
+  useMutation({
+    mutationKey: [...nonceKeys, "tx", "close", "signed"],
+    mutationFn: async (
+      json: Parameters<typeof api.nonces.remove.$patch>[0]["json"]
+    ) => {
+      const res = await api.nonces.remove.$patch({
+        json,
+      });
+      if (!res.ok) throw new Error(res.statusText);
+      return "";
     },
   });
 
@@ -82,6 +89,7 @@ function NonceForm() {
   const { mutateAsync: createNoncesTx } = useNoncesTx();
   const { mutateAsync: sendNoncesTx } = useNoncesSend();
   const { mutateAsync: closeNonces } = useNoncesClose();
+  const { mutateAsync: confirmCloseNonces } = useNoncesCloseConfirm();
 
   const [busy, setBusy] = useState(false);
 
@@ -94,14 +102,14 @@ function NonceForm() {
     setBusy(true);
 
     try {
-      const res = await createNoncesTx({
+      const newNonces = await createNoncesTx({
         sender: publicKey.toString(),
         qt: `${toCreate}`,
       });
-      const noncesTxsRaw = res.reduce(
-        (all, { transaction }) => (transaction ? [...all, transaction] : all),
-        [] as string[]
-      );
+      const noncesTxsRaw = newNonces.reduce((all, { tx }) => {
+        if (tx) all.push(tx);
+        return all;
+      }, [] as string[]);
       console.log("NonceTx: ", noncesTxsRaw.join(", "));
 
       const noncesTxs = noncesTxsRaw.map((tx) => deserialize(tx));
@@ -109,10 +117,9 @@ function NonceForm() {
       if (!txSigned) throw new Error("Transaction not signed");
 
       await sendNoncesTx(
-        noncesTxsRaw.map((tx, i) => ({
-          sender: publicKey.toString(),
-          transaction: tx,
-          transactionSigned: serialize(txSigned[i]),
+        newNonces.map((nonce, i) => ({
+          ...nonce,
+          txSigned: serialize(txSigned[i]),
         }))
       );
 
@@ -138,32 +145,29 @@ function NonceForm() {
       if (!publicKey) throw new Error("Wallet not connected");
       if (!nonces?.length) throw new Error("No nonces available");
 
-      const closeTxs = await Promise.all(
-        toCloseKeys.map((idx) => {
-          const nonce = nonces[idx];
-          if (!nonce) throw new Error("Nonce not found");
-          return closeNonceTx({
-            noncePublicKey: nonce.noncePublicKey,
-            signer: publicKey.toString(),
-          });
-        })
+      const toCloseNonces = await closeNonces(
+        toCloseKeys.map((idx) => ({
+          sender: publicKey.toString(),
+          noncePublicKey: nonces[idx].noncePublicKey,
+        }))
       );
+      const closeTxsRaw = toCloseNonces.reduce((all, { tx }) => {
+        if (tx) all.push(tx);
+        return all;
+      }, [] as string[]);
+      console.log("CloseNonceTx: ", closeTxsRaw.join(", "));
 
+      const closeTxs = closeTxsRaw.map((tx) => deserialize(tx));
       const txSigned = await signAllTransactions?.(closeTxs);
       if (!txSigned) throw new Error("Transaction not signed");
 
-      await Promise.all(
-        txSigned.map((tx) => sendAndConfirmRawTransaction(serialize(tx)))
-      );
-
-      await closeNonces(
-        toCloseKeys.map((idx) => ({
-          id: nonces[idx].id,
-          sender: publicKey.toString(),
+      await confirmCloseNonces(
+        toCloseNonces.map((nonce, i) => ({
+          ...nonce,
+          txSigned: serialize(txSigned[i]),
         }))
       );
 
-      setToCloseKeys([]);
       queryClient.invalidateQueries({ queryKey: nonceKeys });
 
       toast.info("Nonce closed!");
@@ -171,6 +175,7 @@ function NonceForm() {
       console.log(error);
       toast.error("Failed to close nonce!");
     } finally {
+      setToCloseKeys([]);
       setBusy(false);
     }
   };
@@ -179,8 +184,8 @@ function NonceForm() {
     <form onSubmit={onCloseNonces} className="flex flex-col gap-2">
       {!!nonces?.length && (
         <>
-          {nonces.map(({ id, noncePublicKey, transactionSigned }, idx) => {
-            if (!transactionSigned) return null;
+          {nonces.map(({ id, noncePublicKey, transaction }, idx) => {
+            if (!transaction) return null;
             return (
               <div key={id} className="flex space-x-2">
                 <Checkbox
@@ -241,11 +246,9 @@ function NonceForm() {
 const useTransaction = () =>
   useMutation({
     mutationKey: [...transactionKeys, "tx"],
-    mutationFn: async (json: {
-      sender: string;
-      recipient: string;
-      amount: number;
-    }) => {
+    mutationFn: async (
+      json: Parameters<typeof api.transactions.$post>[0]["json"]
+    ) => {
       const res = await api.transactions.$post({
         json,
       });
@@ -257,11 +260,9 @@ const useTransaction = () =>
 const useTransactionSend = () =>
   useMutation({
     mutationKey: [...transactionKeys, "tx", "signed"],
-    mutationFn: async (json: {
-      sender: string;
-      transaction: string;
-      transactionSigned: string;
-    }) => {
+    mutationFn: async (
+      json: Parameters<typeof api.transactions.$patch>[0]["json"]
+    ) => {
       const res = await api.transactions.$patch({
         json,
       });
@@ -295,20 +296,20 @@ function TransferForm() {
       if (!recipient) throw new Error("Recipient not provided");
       if (!amount) throw new Error("Amount not provided");
 
-      const { transaction: advanceTx } = await createTransaction({
+      const { id, tx: advanceTx } = await createTransaction({
         sender: publicKey.toString(),
         recipient,
         amount,
       });
       console.log("AdvanceTx: ", advanceTx);
 
-      const txSigned = await signTransaction?.(deserialize(advanceTx!));
+      const txSigned = await signTransaction?.(deserialize(advanceTx));
       if (!txSigned) throw new Error("Transaction not signed");
 
       await sendTransaction({
+        id,
         sender: publicKey.toString(),
-        transaction: advanceTx!,
-        transactionSigned: serialize(txSigned),
+        txSigned: serialize(txSigned),
       });
 
       formRef.current?.reset();
@@ -356,7 +357,9 @@ const useTransactions = (sender?: string) =>
 const useTransactionsExecute = () =>
   useMutation({
     mutationKey: [...transactionKeys, "execute"],
-    mutationFn: async (json: { id: number; sender: string }[]) => {
+    mutationFn: async (
+      json: Parameters<typeof api.transactions.execute.$patch>[0]["json"]
+    ) => {
       const res = await api.transactions.execute.$patch({
         json,
       });
@@ -381,10 +384,11 @@ function Transfers() {
 
     try {
       if (!publicKey) throw new Error("Wallet not connected");
+      if (!transactions) throw new Error("No transactions available");
 
       await executeTransactions(
         toExecuteKeys.map((idx) => ({
-          id: transactions![idx].id,
+          id: transactions[idx].id,
           sender: publicKey?.toString(),
         }))
       );
@@ -411,71 +415,69 @@ function Transfers() {
 
   return (
     <form onSubmit={onSubmit} className="flex flex-col gap-2">
-      {transactions.map(
-        ({ id, transactionSigned, transactionExecuted }, idx) => {
-          if (!transactionSigned) return null;
-          return (
-            <div key={id} className="flex space-x-2 items-center">
-              {transactionExecuted ? (
-                <div>
-                  <CheckIcon className="h-4 w-4 text-green-500" />
-                </div>
-              ) : (
-                <Checkbox
-                  id={`${id}-${transactionSigned}`}
-                  onCheckedChange={(v) => {
-                    if (v) {
-                      setToExecuteKeys((s) => [...s, idx]);
-                    } else {
-                      setToExecuteKeys((s) => s.filter((n) => n !== idx));
-                    }
-                  }}
-                />
-              )}
-              <div className="flex-1 flex flex-col space-y-1">
-                <label
-                  htmlFor={`${id}-${transactionSigned}`}
-                  className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 inline-flex gap-1 items-baseline"
-                >
-                  {id}.{" "}
-                  <span className="text-xs text-zinc-400 font-medium leading-none">
-                    {transactionSigned.slice(0, 36)}...
-                  </span>
-                </label>
+      {transactions.map(({ id, signature, transaction: txExecuted }, idx) => {
+        if (!signature) return null;
+        return (
+          <div key={id} className="flex space-x-2 items-center">
+            {txExecuted ? (
+              <div>
+                <CheckIcon className="h-4 w-4 text-green-500" />
               </div>
-              <div className="flex gap-1 items-center">
-                <Button
-                  type="button"
-                  onClick={() =>
-                    copyToClipboard(transactionSigned).then((t) =>
-                      t
-                        ? toast.info("Text copied!")
-                        : toast.error(
-                            "Clipboard is not available! Check browser logs."
-                          )
-                    )
+            ) : (
+              <Checkbox
+                id={`${id}-${signature}`}
+                onCheckedChange={(v) => {
+                  if (v) {
+                    setToExecuteKeys((s) => [...s, idx]);
+                  } else {
+                    setToExecuteKeys((s) => s.filter((n) => n !== idx));
                   }
-                  size="icon"
-                  variant="ghost"
-                >
-                  <CopyIcon className="h-4 w-4" />
-                </Button>
-                {!!transactionExecuted && (
-                  <Button size="icon" variant="ghost" asChild>
-                    <a
-                      href={`https://solana.fm/tx/${transactionExecuted}`}
-                      target="_blank"
-                      rel="noreferrer"
-                    >
-                      <ExternalLinkIcon className="h-4 w-4" />
-                    </a>
-                  </Button>
-                )}
-              </div>
+                }}
+              />
+            )}
+            <div className="flex-1 flex flex-col space-y-1">
+              <label
+                htmlFor={`${id}-${signature}`}
+                className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 inline-flex gap-1 items-baseline"
+              >
+                {id}.{" "}
+                <span className="text-xs text-zinc-400 font-medium leading-none">
+                  {signature.slice(0, 36)}...
+                </span>
+              </label>
             </div>
-          );
-        }
-      )}
+            <div className="flex gap-1 items-center">
+              <Button
+                type="button"
+                onClick={() =>
+                  copyToClipboard(signature).then((t) =>
+                    t
+                      ? toast.info("Text copied!")
+                      : toast.error(
+                          "Clipboard is not available! Check browser logs."
+                        )
+                  )
+                }
+                size="icon"
+                variant="ghost"
+              >
+                <CopyIcon className="h-4 w-4" />
+              </Button>
+              {!!txExecuted && (
+                <Button size="icon" variant="ghost" asChild>
+                  <a
+                    href={`https://solana.fm/tx/${txExecuted}`}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    <ExternalLinkIcon className="h-4 w-4" />
+                  </a>
+                </Button>
+              )}
+            </div>
+          </div>
+        );
+      })}
       <Button
         disabled={!toExecuteKeys.length || busy}
         type="submit"

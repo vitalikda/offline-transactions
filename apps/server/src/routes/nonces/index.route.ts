@@ -5,5 +5,6 @@ import * as routes from "./routes";
 export default createRouter()
   .openapi(routes.list, handlers.list)
   .openapi(routes.create, handlers.create)
-  .openapi(routes.patch, handlers.patch)
-  .openapi(routes.remove, handlers.remove);
+  .openapi(routes.createUpdate, handlers.createUpdate)
+  .openapi(routes.remove, handlers.remove)
+  .openapi(routes.removeUpdate, handlers.removeUpdate);

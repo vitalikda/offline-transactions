@@ -5,6 +5,7 @@ export const ZOD_ERROR_MESSAGES = {
   REQUIRED: "Required",
   EXPECTED_NUMBER: "Expected number, received nan",
   NO_UPDATES: "No updates provided",
+  NONCE_REQUIRED: "Nonce required",
 };
 
 export const ZOD_ERROR_CODES = {

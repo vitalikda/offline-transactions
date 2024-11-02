@@ -1,14 +1,14 @@
-import { and, desc, eq, isNotNull, isNull } from "drizzle-orm";
+import { and, desc, eq, isNotNull, isNull, notInArray } from "drizzle-orm";
 import db from "src/db";
-import { transactions } from "src/db/schema";
-import { ZOD_ERROR_CODES, ZOD_ERROR_MESSAGES } from "src/lib/constants";
+import { authorities, nonces, transactions } from "src/db/schema";
+import { ZOD_ERROR_MESSAGES } from "src/lib/constants";
 import { sendAndConfirmRawTransaction, serialize } from "src/lib/solana";
 import type { AppRouteHandler } from "src/lib/types";
-import { getNonceInfo } from "src/routes/nonces/utils";
+import { getAuthKeypair, getNonceInfo } from "src/routes/nonces/utils";
 import * as HttpStatusCodes from "stoker/http-status-codes";
 import * as HttpStatusPhrases from "stoker/http-status-phrases";
 import type * as routes from "./routes";
-import { createAdvanceTx } from "./utils";
+import { createAdvanceTransfer } from "./utils";
 
 export const list: AppRouteHandler<typeof routes.list> = async (c) => {
   const { sender } = c.req.valid("query");
@@ -16,7 +16,7 @@ export const list: AppRouteHandler<typeof routes.list> = async (c) => {
   const nonceList = await db.query.transactions.findMany({
     where: and(
       eq(transactions.sender, sender),
-      isNotNull(transactions.transactionSigned)
+      isNotNull(transactions.signature)
     ),
     orderBy: [desc(transactions.createdAt)],
   });
@@ -27,103 +27,84 @@ export const list: AppRouteHandler<typeof routes.list> = async (c) => {
 export const create: AppRouteHandler<typeof routes.create> = async (c) => {
   const { sender, recipient, amount } = c.req.valid("json");
 
+  const authority = await db.query.authorities.findFirst({
+    where: eq(authorities.sender, sender),
+  });
+
+  if (!authority) {
+    return c.json(
+      { message: ZOD_ERROR_MESSAGES.NONCE_REQUIRED },
+      HttpStatusCodes.PAYMENT_REQUIRED
+    );
+  }
+
+  const scheduledTransactions = await db.query.transactions.findMany({
+    where: and(
+      eq(transactions.sender, sender),
+      isNotNull(transactions.signature),
+      isNull(transactions.transaction)
+    ),
+  });
+  const usedNonces = scheduledTransactions.map((tx) => tx.noncePublicKey);
   const nonce = await db.query.nonces.findFirst({
     columns: {
       noncePublicKey: true,
     },
     where: and(
-      eq(transactions.sender, sender),
-      isNotNull(transactions.transactionSigned)
+      eq(nonces.sender, sender),
+      isNotNull(nonces.transaction),
+      notInArray(nonces.noncePublicKey, usedNonces)
     ),
   });
 
   if (!nonce) {
     return c.json(
-      {
-        success: false,
-        error: {
-          issues: [
-            {
-              code: ZOD_ERROR_CODES.INVALID_UPDATES,
-              path: [],
-              message: ZOD_ERROR_MESSAGES.NO_UPDATES,
-            },
-          ],
-          name: "ZodError",
-        },
-      },
-      HttpStatusCodes.UNPROCESSABLE_ENTITY
+      { message: ZOD_ERROR_MESSAGES.NONCE_REQUIRED },
+      HttpStatusCodes.PAYMENT_REQUIRED
     );
   }
 
-  const newNonce = await getNonceInfo(nonce.noncePublicKey);
-
-  // NOTE: clean up old transactions
   await db
     .delete(transactions)
     .where(
-      and(
-        eq(transactions.sender, sender),
-        isNull(transactions.transactionSigned)
-      )
+      and(eq(transactions.sender, sender), isNull(transactions.signature))
     );
 
-  const advanceTx = createAdvanceTx({
-    noncePublicKey: nonce.noncePublicKey,
-    nonce: newNonce.nonce,
-    signer: sender,
+  const advanceTx = await createAdvanceTransfer({
+    nonceAccountPublicKey: nonce.noncePublicKey,
+    nonceAuthority: getAuthKeypair(authority.nonceSecretKey),
+    feePayer: sender,
+    sender,
     recipient,
     amount,
   });
 
-  const [inserted] = await db
+  const [transaction] = await db
     .insert(transactions)
-    .values({
-      sender,
-      recipient,
-      amount,
-      transaction: serialize(advanceTx),
-    })
+    .values({ sender, recipient, amount, noncePublicKey: nonce.noncePublicKey })
     .returning();
 
-  return c.json(inserted, HttpStatusCodes.OK);
+  return c.json(
+    {
+      id: transaction.id,
+      sender: transaction.sender,
+      noncePublicKey: transaction.noncePublicKey,
+      tx: serialize(advanceTx),
+    },
+    HttpStatusCodes.OK
+  );
 };
 
 export const patch: AppRouteHandler<typeof routes.patch> = async (c) => {
-  const { sender, transaction, transactionSigned } = c.req.valid("json");
-
-  if (!transaction || !transactionSigned) {
-    return c.json(
-      {
-        success: false,
-        error: {
-          issues: [
-            {
-              code: ZOD_ERROR_CODES.INVALID_UPDATES,
-              path: [],
-              message: ZOD_ERROR_MESSAGES.NO_UPDATES,
-            },
-          ],
-          name: "ZodError",
-        },
-      },
-      HttpStatusCodes.UNPROCESSABLE_ENTITY
-    );
-  }
-
+  const { id, sender, txSigned } = c.req.valid("json");
   c.var.logger.info(
-    `Updating transaction: ${JSON.stringify({ transaction, transactionSigned })}`
+    `Updating transaction: ${JSON.stringify({ id, txSigned })}`
   );
 
   const [updated] = await db
     .update(transactions)
-    .set({ transactionSigned })
-    .where(
-      and(
-        eq(transactions.sender, sender),
-        eq(transactions.transaction, transaction)
-      )
-    )
+    .set({ signature: txSigned })
+    .where(and(eq(transactions.id, id), eq(transactions.sender, sender)))
     .returning();
 
   if (!updated) {
@@ -138,29 +119,27 @@ export const patch: AppRouteHandler<typeof routes.patch> = async (c) => {
 
 export const execute: AppRouteHandler<typeof routes.execute> = async (c) => {
   const txs = c.req.valid("json");
-
   c.var.logger.info(`Remove nonces: ${JSON.stringify(txs)}`);
 
   const newTxs = await Promise.all(
     txs.map(async ({ id, sender }) => {
       const sqlWhere = and(
         eq(transactions.id, id),
-        eq(transactions.sender, sender)
+        eq(transactions.sender, sender),
+        isNotNull(transactions.signature)
       );
 
       const transaction = await db.query.transactions.findFirst({
         where: sqlWhere,
       });
-      if (!transaction) throw new Error("Transaction not found");
+      if (!transaction?.signature) throw new Error("Transaction not found");
 
-      const tx = await sendAndConfirmRawTransaction(
-        transaction.transactionSigned!
-      );
+      const tx = await sendAndConfirmRawTransaction(transaction.signature);
       c.var.logger.info(`Transaction executed: ${tx}`);
 
       const [newNonce] = await db
         .update(transactions)
-        .set({ transactionExecuted: tx })
+        .set({ transaction: tx })
         .where(sqlWhere)
         .returning();
 

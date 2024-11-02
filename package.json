@@ -1,7 +1,7 @@
 {
   "name": "solana-react-vite",
   "private": true,
-  "packageManager": "pnpm@9.12.1",
+  "packageManager": "pnpm@9.12.3",
   "scripts": {
     "dev": "pnpm -r --parallel --reporter=append-only run dev",
     "build": "pnpm -r run build",

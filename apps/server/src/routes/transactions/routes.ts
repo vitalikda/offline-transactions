@@ -1,8 +1,6 @@
 import { createRoute } from "@hono/zod-openapi";
 import {
-  executeTransactionSchema,
   insertTransactionSchema,
-  patchTransactionSchema,
   selectTransactionSchema,
   senderType,
 } from "src/db/schema";
@@ -45,8 +43,24 @@ export const create = createRoute({
   },
   responses: {
     [HttpStatusCodes.OK]: jsonContent(
-      selectTransactionSchema,
+      selectTransactionSchema
+        .pick({
+          id: true,
+          sender: true,
+          noncePublicKey: true,
+        })
+        .and(
+          z.object({
+            tx: z.string().min(1),
+          })
+        ),
       "The transaction created"
+    ),
+    [HttpStatusCodes.PAYMENT_REQUIRED]: jsonContent(
+      z.object({
+        message: z.string().min(1),
+      }),
+      "The transaction requires nonce account"
     ),
     [HttpStatusCodes.UNPROCESSABLE_ENTITY]: jsonContent(
       createErrorSchema(insertTransactionSchema),
@@ -54,6 +68,15 @@ export const create = createRoute({
     ),
   },
 });
+
+const patchTransactionSchema = insertTransactionSchema
+  .required({ id: true })
+  .pick({ id: true, sender: true })
+  .and(
+    z.object({
+      txSigned: z.string().min(1),
+    })
+  );
 
 export const patch = createRoute({
   path: basePath,
@@ -80,13 +103,19 @@ export const patch = createRoute({
   },
 });
 
+const executeTransactionSchema = z.array(
+  insertTransactionSchema
+    .required({ id: true })
+    .pick({ id: true, sender: true })
+);
+
 export const execute = createRoute({
   path: `${basePath}/execute`,
   method: "patch",
   tags,
   request: {
     body: jsonContentRequired(
-      z.array(executeTransactionSchema),
+      executeTransactionSchema,
       "To execute transactions"
     ),
   },

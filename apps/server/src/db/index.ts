@@ -11,6 +11,7 @@ const client = createClient({
 
 const db = drizzle(client, {
   schema,
+  casing: "snake_case",
 });
 
 export default db;

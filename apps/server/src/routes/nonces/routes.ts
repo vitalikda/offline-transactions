@@ -1,8 +1,6 @@
 import { createRoute } from "@hono/zod-openapi";
 import {
   insertNonceSchema,
-  patchNonceSchema,
-  removeNonceSchema,
   selectNonceSchema,
   senderType,
 } from "src/db/schema";
@@ -36,6 +34,8 @@ export const list = createRoute({
   },
 });
 
+const createNonceSchema = insertNonceSchema.pick({ sender: true });
+
 export const create = createRoute({
   path: basePath,
   method: "post",
@@ -44,26 +44,41 @@ export const create = createRoute({
     query: z.object({
       qt: z.coerce.number().min(1).max(10).optional().default(1),
     }),
-    body: jsonContentRequired(insertNonceSchema, "To create nonces"),
+    body: jsonContentRequired(createNonceSchema, "To create nonces"),
   },
   responses: {
     [HttpStatusCodes.OK]: jsonContent(
-      z.array(selectNonceSchema),
-      "Nonces created"
+      z.array(
+        selectNonceSchema.pick({ sender: true, noncePublicKey: true }).and(
+          z.object({
+            tx: z.string().min(1),
+          })
+        )
+      ),
+      "Nonce transactions to sign"
     ),
     [HttpStatusCodes.UNPROCESSABLE_ENTITY]: jsonContent(
-      createErrorSchema(insertNonceSchema),
+      createErrorSchema(createNonceSchema),
       "The validation error(s)"
     ),
   },
 });
 
-export const patch = createRoute({
+const createUpdateNonceSchema = z.array(
+  insertNonceSchema.pick({ sender: true, noncePublicKey: true }).and(
+    z.object({
+      tx: z.string().min(1),
+      txSigned: z.string().min(1),
+    })
+  )
+);
+
+export const createUpdate = createRoute({
   path: basePath,
   method: "patch",
   tags,
   request: {
-    body: jsonContentRequired(z.array(patchNonceSchema), "To updated nonces"),
+    body: jsonContentRequired(createUpdateNonceSchema, "To updated nonces"),
   },
   responses: {
     [HttpStatusCodes.OK]: jsonContent(
@@ -72,18 +87,57 @@ export const patch = createRoute({
     ),
     [HttpStatusCodes.NOT_FOUND]: jsonContent(notFoundSchema, "Nonce not found"),
     [HttpStatusCodes.UNPROCESSABLE_ENTITY]: jsonContent(
-      createErrorSchema(patchNonceSchema),
+      createErrorSchema(createUpdateNonceSchema),
       "The validation error(s)"
     ),
   },
 });
 
+const removeNonceSchema = z.array(
+  insertNonceSchema.pick({ sender: true, noncePublicKey: true })
+);
+
 export const remove = createRoute({
-  path: basePath,
-  method: "delete",
+  path: `${basePath}/remove`,
+  method: "post",
   tags,
   request: {
-    body: jsonContentRequired(z.array(removeNonceSchema), "To remove nonces"),
+    body: jsonContentRequired(removeNonceSchema, "To remove nonces"),
+  },
+  responses: {
+    [HttpStatusCodes.OK]: jsonContent(
+      z.array(
+        selectNonceSchema.pick({ sender: true, noncePublicKey: true }).and(
+          z.object({
+            tx: z.string().min(1),
+          })
+        )
+      ),
+      "Nonces transactions to sign"
+    ),
+    [HttpStatusCodes.NOT_FOUND]: jsonContent(notFoundSchema, "Nonce not found"),
+    [HttpStatusCodes.UNPROCESSABLE_ENTITY]: jsonContent(
+      createErrorSchema(removeNonceSchema),
+      "The validation error(s)"
+    ),
+  },
+});
+
+const removeUpdateNonceSchema = z.array(
+  insertNonceSchema.pick({ sender: true, noncePublicKey: true }).and(
+    z.object({
+      tx: z.string().min(1),
+      txSigned: z.string().min(1),
+    })
+  )
+);
+
+export const removeUpdate = createRoute({
+  path: `${basePath}/remove`,
+  method: "patch",
+  tags,
+  request: {
+    body: jsonContentRequired(removeUpdateNonceSchema, "To remove nonces"),
   },
   responses: {
     [HttpStatusCodes.NO_CONTENT]: {
@@ -91,7 +145,7 @@ export const remove = createRoute({
     },
     [HttpStatusCodes.NOT_FOUND]: jsonContent(notFoundSchema, "Nonce not found"),
     [HttpStatusCodes.UNPROCESSABLE_ENTITY]: jsonContent(
-      createErrorSchema(removeNonceSchema),
+      createErrorSchema(removeUpdateNonceSchema),
       "The validation error(s)"
     ),
   },

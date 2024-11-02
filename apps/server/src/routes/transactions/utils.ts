@@ -1,48 +1,53 @@
 import {
+  type Keypair,
   PublicKey,
   SystemProgram,
   TransactionMessage,
   VersionedTransaction,
 } from "@solana/web3.js";
 import { getPrioriFeeIxs, toLamports } from "src/lib/solana";
+import { getNonceInfo } from "src/routes/nonces/utils";
 
-export const createAdvanceTx = ({
-  noncePublicKey,
-  nonce,
-  signer,
+export const createAdvanceTransfer = async ({
+  nonceAccountPublicKey,
+  nonceAuthority,
   feePayer,
+  sender,
   recipient,
   amount,
 }: {
-  noncePublicKey: string;
-  nonce: string;
-  signer: string;
-  feePayer?: string;
+  nonceAccountPublicKey: string;
+  nonceAuthority: Keypair;
+  feePayer: string;
+  sender: string;
   recipient: string;
   amount: number;
 }) => {
-  const signerPK = new PublicKey(signer);
-  const noncePK = new PublicKey(noncePublicKey);
+  const { nonce } = await getNonceInfo(nonceAccountPublicKey);
+
+  const noncePK = new PublicKey(nonceAccountPublicKey);
 
   const ixs = [
     SystemProgram.nonceAdvance({
-      authorizedPubkey: signerPK,
+      authorizedPubkey: nonceAuthority.publicKey,
       noncePubkey: noncePK,
     }),
     SystemProgram.transfer({
-      fromPubkey: signerPK,
+      fromPubkey: new PublicKey(sender),
       toPubkey: new PublicKey(recipient),
       lamports: toLamports(amount),
     }),
   ];
 
   const messageV0 = new TransactionMessage({
-    payerKey: feePayer ? new PublicKey(feePayer) : signerPK,
+    payerKey: new PublicKey(feePayer),
     recentBlockhash: nonce,
     instructions: ixs.concat(getPrioriFeeIxs()),
   }).compileToV0Message();
 
   const tx = new VersionedTransaction(messageV0);
+
+  tx.sign([nonceAuthority]);
 
   return tx;
 };

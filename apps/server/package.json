@@ -27,7 +27,7 @@
     "@solana/web3.js": "1.95.3",
     "bs58": "6.0.0",
     "dotenv": "16.4.5",
-    "drizzle-orm": "0.34.1",
+    "drizzle-orm": "0.36.0",
     "drizzle-zod": "0.5.1",
     "hono": "4.6.3",
     "hono-pino": "0.3.0",
@@ -40,7 +40,7 @@
   "devDependencies": {
     "@antfu/eslint-config": "3.7.3",
     "@types/node": "22.7.4",
-    "drizzle-kit": "0.25.0",
+    "drizzle-kit": "0.27.1",
     "eslint": "9.9.0",
     "eslint-plugin-format": "0.1.2",
     "tsc-alias": "1.8.10",

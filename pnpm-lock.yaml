@@ -162,11 +162,11 @@ importers:
         specifier: 16.4.5
         version: 16.4.5
       drizzle-orm:
-        specifier: 0.34.1
-        version: 0.34.1(@libsql/client@0.14.0(bufferutil@4.0.8)(utf-8-validate@5.0.10))(@types/react@18.3.3)(react@18.3.1)
+        specifier: 0.36.0
+        version: 0.36.0(@libsql/client@0.14.0(bufferutil@4.0.8)(utf-8-validate@5.0.10))(@types/react@18.3.3)(react@18.3.1)
       drizzle-zod:
         specifier: 0.5.1
-        version: 0.5.1(drizzle-orm@0.34.1(@libsql/client@0.14.0(bufferutil@4.0.8)(utf-8-validate@5.0.10))(@types/react@18.3.3)(react@18.3.1))(zod@3.23.8)
+        version: 0.5.1(drizzle-orm@0.36.0(@libsql/client@0.14.0(bufferutil@4.0.8)(utf-8-validate@5.0.10))(@types/react@18.3.3)(react@18.3.1))(zod@3.23.8)
       hono:
         specifier: 4.6.3
         version: 4.6.3
@@ -196,8 +196,8 @@ importers:
         specifier: 22.7.4
         version: 22.7.4
       drizzle-kit:
-        specifier: 0.25.0
-        version: 0.25.0
+        specifier: 0.27.1
+        version: 0.27.1
       eslint:
         specifier: 9.9.0
         version: 9.9.0(jiti@2.3.3)
@@ -997,8 +997,8 @@ packages:
   '@dprint/toml@0.6.3':
     resolution: {integrity: sha512-zQ42I53sb4WVHA+5yoY1t59Zk++Ot02AvUgtNKLzTT8mPyVqVChFcePa3on/xIoKEgH+RoepgPHzqfk9837YFw==}
 
-  '@drizzle-team/brocli@0.10.1':
-    resolution: {integrity: sha512-AHy0vjc+n/4w/8Mif+w86qpppHuF3AyXbcWW+R/W7GNA3F5/p2nuhlkCJaTXSLZheB4l1rtHzOfr9A7NwoR/Zg==}
+  '@drizzle-team/brocli@0.10.2':
+    resolution: {integrity: sha512-z33Il7l5dKjUgGULTqBsQBQwckHh5AbIuxhdsIxDDiZAzBOrZO6q9ogcWC65kU382AfynTfgNumVcNIjuIua6w==}
 
   '@ecies/ciphers@0.2.0':
     resolution: {integrity: sha512-dqQk3HbyuXSdflgRMrXjEcCohKeBZQl2rm0lOcYnEC4Oue90irVMwVJ0GiM/nhjP0zzGimH8mVFF/pOzQcv+Lg==}
@@ -3828,17 +3828,18 @@ packages:
     resolution: {integrity: sha512-ZmdL2rui+eB2YwhsWzjInR8LldtZHGDoQ1ugH85ppHKwpUHL7j7rN0Ti9NCnGiQbhaZ11FpR+7ao1dNsmduNUg==}
     engines: {node: '>=12'}
 
-  drizzle-kit@0.25.0:
-    resolution: {integrity: sha512-Rcf0nYCAKizwjWQCY+d3zytyuTbDb81NcaPor+8NebESlUz1+9W3uGl0+r9FhU4Qal5Zv9j/7neXCSCe7DHzjA==}
+  drizzle-kit@0.27.1:
+    resolution: {integrity: sha512-4BNA0T2blN+jW5wSwhtc+FIlCMuxYSMWCnYYdOBi5rttwq8aVXRUid0d0NCzcBKtZQSPZGAUxy+TXr7Q1OgEug==}
     hasBin: true
 
-  drizzle-orm@0.34.1:
-    resolution: {integrity: sha512-t+zCwyWWt8xTqtYV4doE/xYmT7hpv1L8pQ66zddEz+3VWyedBBtctjMAp22mAJPfyWurRQXUJ1nrTtqLq+DqNA==}
+  drizzle-orm@0.36.0:
+    resolution: {integrity: sha512-6BETYPdKSR7cDHC0ZfqZk2VrKJ8n/Rfd3ajFPsAbc69gi87nwZ6oBA2wUGMELHA0tQE4kUKN0Ds00LUZQ6Z69A==}
     peerDependencies:
       '@aws-sdk/client-rds-data': '>=3'
       '@cloudflare/workers-types': '>=3'
-      '@electric-sql/pglite': '>=0.1.1'
+      '@electric-sql/pglite': '>=0.2.0'
       '@libsql/client': '>=0.10.0'
+      '@libsql/client-wasm': '>=0.10.0'
       '@neondatabase/serverless': '>=0.1'
       '@op-engineering/op-sqlite': '>=2'
       '@opentelemetry/api': ^1.4.1
@@ -3871,6 +3872,8 @@ packages:
       '@electric-sql/pglite':
         optional: true
       '@libsql/client':
+        optional: true
+      '@libsql/client-wasm':
         optional: true
       '@neondatabase/serverless':
         optional: true
@@ -8162,7 +8165,7 @@ snapshots:
 
   '@dprint/toml@0.6.3': {}
 
-  '@drizzle-team/brocli@0.10.1': {}
+  '@drizzle-team/brocli@0.10.2': {}
 
   '@ecies/ciphers@0.2.0(@noble/ciphers@1.0.0)':
     dependencies:
@@ -11446,24 +11449,24 @@ snapshots:
 
   dotenv@16.4.5: {}
 
-  drizzle-kit@0.25.0:
+  drizzle-kit@0.27.1:
     dependencies:
-      '@drizzle-team/brocli': 0.10.1
+      '@drizzle-team/brocli': 0.10.2
       '@esbuild-kit/esm-loader': 2.6.5
       esbuild: 0.19.12
       esbuild-register: 3.6.0(esbuild@0.19.12)
     transitivePeerDependencies:
       - supports-color
 
-  drizzle-orm@0.34.1(@libsql/client@0.14.0(bufferutil@4.0.8)(utf-8-validate@5.0.10))(@types/react@18.3.3)(react@18.3.1):
+  drizzle-orm@0.36.0(@libsql/client@0.14.0(bufferutil@4.0.8)(utf-8-validate@5.0.10))(@types/react@18.3.3)(react@18.3.1):
     optionalDependencies:
       '@libsql/client': 0.14.0(bufferutil@4.0.8)(utf-8-validate@5.0.10)
       '@types/react': 18.3.3
       react: 18.3.1
 
-  drizzle-zod@0.5.1(drizzle-orm@0.34.1(@libsql/client@0.14.0(bufferutil@4.0.8)(utf-8-validate@5.0.10))(@types/react@18.3.3)(react@18.3.1))(zod@3.23.8):
+  drizzle-zod@0.5.1(drizzle-orm@0.36.0(@libsql/client@0.14.0(bufferutil@4.0.8)(utf-8-validate@5.0.10))(@types/react@18.3.3)(react@18.3.1))(zod@3.23.8):
     dependencies:
-      drizzle-orm: 0.34.1(@libsql/client@0.14.0(bufferutil@4.0.8)(utf-8-validate@5.0.10))(@types/react@18.3.3)(react@18.3.1)
+      drizzle-orm: 0.36.0(@libsql/client@0.14.0(bufferutil@4.0.8)(utf-8-validate@5.0.10))(@types/react@18.3.3)(react@18.3.1)
       zod: 3.23.8
 
   duplexify@4.1.3:

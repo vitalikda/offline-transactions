@@ -4,7 +4,6 @@ import {
   NonceAccount,
   PublicKey,
   SystemProgram,
-  Transaction,
   TransactionMessage,
   VersionedTransaction,
 } from "@solana/web3.js";
@@ -43,80 +42,95 @@ export const getNonceInfo = async (publicKey: string) => {
   return NonceAccount.fromAccountData(accountInfo.data);
 };
 
-export const createNonceTx = async ({
-  nonceKeypair,
-  signer,
+export const createNonceAccount = async ({
+  nonceAccount,
+  nonceAuthority,
   feePayer,
 }: {
-  nonceKeypair: Keypair;
-  signer: string;
-  feePayer?: string;
+  nonceAccount: Keypair;
+  nonceAuthority: Keypair;
+  feePayer: string;
 }) => {
   const rent =
     await connection.getMinimumBalanceForRentExemption(NONCE_ACCOUNT_LENGTH);
 
   const latestBlockhash = await connection.getLatestBlockhash();
 
-  const signerPK = new PublicKey(signer);
+  const feePayerPK = new PublicKey(feePayer);
 
   const ixs = [
     SystemProgram.createAccount({
-      fromPubkey: signerPK,
-      newAccountPubkey: nonceKeypair.publicKey,
+      fromPubkey: feePayerPK,
+      newAccountPubkey: nonceAccount.publicKey,
       lamports: rent,
       space: NONCE_ACCOUNT_LENGTH,
       programId: SystemProgram.programId,
     }),
-
     SystemProgram.nonceInitialize({
-      authorizedPubkey: signerPK,
-      noncePubkey: nonceKeypair.publicKey,
+      authorizedPubkey: nonceAuthority.publicKey,
+      noncePubkey: nonceAccount.publicKey,
     }),
   ];
 
   const messageV0 = new TransactionMessage({
-    payerKey: feePayer ? new PublicKey(feePayer) : signerPK,
+    payerKey: feePayerPK,
     recentBlockhash: latestBlockhash.blockhash,
     instructions: ixs.concat(getPrioriFeeIxs()),
   }).compileToV0Message();
 
   const tx = new VersionedTransaction(messageV0);
 
-  tx.sign([nonceKeypair]);
+  tx.sign([nonceAccount]);
 
   return tx;
 };
 
-export const closeNonceTx = async ({
-  sender,
-  nonceKeypair,
+export const closeNonceAccount = async ({
+  nonceAccountPublicKey,
+  nonceAuthority,
+  feePayer,
 }: {
-  sender: string;
-  nonceKeypair: Keypair;
+  nonceAccountPublicKey: string;
+  nonceAuthority: Keypair;
+  feePayer: string;
 }) => {
-  const senderPubkey = new PublicKey(sender);
+  const noncePK = new PublicKey(nonceAccountPublicKey);
 
-  const balance = await connection.getBalance(nonceKeypair.publicKey);
-  if (!balance) return;
+  const balance = await connection.getBalance(noncePK);
+  if (!balance) {
+    throw new Error(`Nonce account balance for ${nonceAccountPublicKey} is 0`);
+  }
+
+  const rent =
+    await connection.getMinimumBalanceForRentExemption(NONCE_ACCOUNT_LENGTH);
+  if (balance < rent) {
+    throw new Error(
+      `Nonce account balance for ${nonceAccountPublicKey} is less than rent: ${balance} < ${rent}`
+    );
+  }
 
   const latestBlockhash = await connection.getLatestBlockhash();
 
-  const closeNonceIx = SystemProgram.nonceWithdraw({
-    noncePubkey: nonceKeypair.publicKey,
-    toPubkey: senderPubkey,
-    authorizedPubkey: senderPubkey,
-    lamports: balance,
-  });
+  const feePayerPK = new PublicKey(feePayer);
 
-  const tx = new Transaction();
+  const ixs = [
+    SystemProgram.nonceWithdraw({
+      noncePubkey: noncePK,
+      toPubkey: feePayerPK,
+      lamports: balance,
+      authorizedPubkey: nonceAuthority.publicKey,
+    }),
+  ];
 
-  tx.add(closeNonceIx);
+  const messageV0 = new TransactionMessage({
+    payerKey: feePayerPK,
+    recentBlockhash: latestBlockhash.blockhash,
+    instructions: ixs.concat(getPrioriFeeIxs()),
+  }).compileToV0Message();
 
-  tx.feePayer = senderPubkey;
-  tx.recentBlockhash = latestBlockhash.blockhash;
-  tx.lastValidBlockHeight = latestBlockhash.lastValidBlockHeight;
+  const tx = new VersionedTransaction(messageV0);
 
-  tx.partialSign(nonceKeypair);
+  tx.sign([nonceAuthority]);
 
   return tx;
 };
