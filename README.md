@@ -8,8 +8,10 @@ This template provides a minimal setup to get Solan Wallet Adapter integrated wi
 
 ### NOTES
 
-- nonce hash is time based
+- nonce account per one transaction
 - nonce account can be re-used
+- nonce account hash is time based
+- nonce authority can be used as a gas station
 
 ### TODO
 
