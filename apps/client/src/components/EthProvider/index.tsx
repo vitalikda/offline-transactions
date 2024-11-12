@@ -1,27 +1,6 @@
 import { Button } from "@/components/ui/button";
-import {
-  http,
-  WagmiProvider,
-  createConfig,
-  useAccount,
-  useConnect,
-  useDisconnect,
-} from "wagmi";
-import { mainnet, sepolia } from "wagmi/chains";
-
-declare module "wagmi" {
-  interface Register {
-    config: typeof config;
-  }
-}
-
-const config = createConfig({
-  chains: [mainnet, sepolia],
-  transports: {
-    [mainnet.id]: http(),
-    [sepolia.id]: http(),
-  },
-});
+import { WagmiProvider, useAccount, useConnect, useDisconnect } from "wagmi";
+import { wagmiConfig } from "./config";
 
 const WalletConnect = ({ children }: { children: React.ReactNode }) => {
   const { address } = useAccount();
@@ -57,7 +36,7 @@ const WalletConnect = ({ children }: { children: React.ReactNode }) => {
 
 export const EthProvider = ({ children }: { children: React.ReactNode }) => {
   return (
-    <WagmiProvider config={config}>
+    <WagmiProvider config={wagmiConfig}>
       <WalletConnect>
         {/*  */}
         {children}
